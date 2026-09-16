@@ -134,5 +134,11 @@
   "auditStarting": "正在開始檢查…",
   "auditCancelling": "正在取消檢查…",
   "auditFailed": "檢查未完成",
-  "auditIssues": "檢查完成，部分項目處理失敗"
+  "auditIssues": "檢查完成，部分項目處理失敗",
+  "startupErrorTitle": "GBF POWER REBORN 無法啟動",
+  "startupErrorMessage": "無法讀取設定或初始化應用程式。此版本要求 schemaVersion 1；請檢查應用資料的格式與存取權限。現有資料不會自動重設。",
+  "runtimeMissingFile": "隨附 WebView2 Runtime 不完整：缺少 {file}。請重新解壓完整套件。",
+  "runtimeMissingLocales": "隨附 WebView2 Runtime 缺少 Locales，請重新解壓完整套件。",
+  "runtimeUnavailable": "隨附 WebView2 Runtime 無法使用，請重新解壓完整套件。",
+  "runtimeInstallPrompt": "此電腦缺少可用的 Microsoft WebView2 Runtime。\n請安裝 Evergreen Runtime 後重新啟動。\n\n是否開啟 Microsoft 官方下載頁？"
 }

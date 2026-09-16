@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import { initialStatus } from '../../src/types';
-import { dictionaries, languageFromSystem } from '../../src/i18n';
+import { dictionaries, languageFromSystem, translate } from '../../src/i18n';
 import { visibilityPoll } from '../../src/polling';
+
+const languageNames = { 'zh-CN': '简体', 'zh-TW': '繁體', ja: '日本語', en: 'English' } as const;
 
 type Options = {
   direct?: boolean; untrusted?: boolean; missingSamples?: boolean;
@@ -114,7 +116,7 @@ async function commands(page: Page) {
   return page.evaluate(() => (window as unknown as { __commands: { command: string; args: Record<string, unknown> }[] }).__commands);
 }
 async function menu(page: Page) {
-  await page.getByRole('button', { name: /^(選單|菜单)$/ }).click();
+  await page.locator('.menu-trigger').click();
   return page.locator('#settings-menu-panel');
 }
 async function openDesktop(page: Page, options: Options = {}) {
@@ -133,22 +135,45 @@ test('visibility generations discard late replies and restore one polling loop',
   poll.dispose(); await new Promise(r => setTimeout(r, 30)); expect(pending).toHaveLength(0);
 });
 
-test('Chinese dictionaries agree and system locale resolves without unsupported languages', () => {
-  const tc = dictionaries['zh-TW']; const sc = dictionaries['zh-CN'];
-  expect(Object.keys(sc).sort()).toEqual(Object.keys(tc).sort());
-  for (const key of Object.keys(tc) as (keyof typeof tc)[]) expect(sc[key].match(/\{\w+\}/g) ?? []).toEqual(tc[key].match(/\{\w+\}/g) ?? []);
-  for (const locale of ['zh-TW', 'zh-HK', 'zh-MO', 'zh-Hant', 'zh_Hant_CN', 'en-US', 'ja-JP', 'fr', '']) expect(languageFromSystem(locale)).toBe('zh-TW');
+test('all four dictionaries preserve keys, placeholders and supported system locales', () => {
+  const canonical = dictionaries['zh-TW'];
+  for (const dictionary of Object.values(dictionaries)) {
+    expect(Object.keys(dictionary).sort()).toEqual(Object.keys(canonical).sort());
+    for (const key of Object.keys(canonical) as (keyof typeof canonical)[]) {
+      expect(dictionary[key].trim()).not.toBe('');
+      expect((dictionary[key].match(/\{\w+\}/g) ?? []).sort()).toEqual((canonical[key].match(/\{\w+\}/g) ?? []).sort());
+    }
+  }
+  for (const locale of ['zh-TW', 'zh-HK', 'zh-MO', 'zh-Hant', 'zh_Hant_CN']) expect(languageFromSystem(locale)).toBe('zh-TW');
   for (const locale of ['zh', 'zh-CN', 'zh-SG', 'zh-Hans', 'zh_Hans_TW']) expect(languageFromSystem(locale)).toBe('zh-CN');
+  for (const locale of ['ja', 'ja-JP', 'ja_JP']) expect(languageFromSystem(locale)).toBe('ja');
+  for (const locale of ['en', 'en-US', 'fr', '', 'jargon']) expect(languageFromSystem(locale)).toBe('en');
 });
 
-test('preview uses Traditional Chinese on an English system and has the correct identity', async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(navigator, 'language', { value: 'en-US' })); await page.goto('/');
-  await expect(page).toHaveTitle('GBF POWER REBORN');
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW');
-  await expect(page.locator('.brand')).toHaveText('GBF POWER REBORN');
-  await expect(page.locator('.statusbar')).toContainText('v0.2.0');
-  await expect(page.locator('.start-button')).toBeDisabled();
-});
+for (const [locale, language] of [['en-US', 'en'], ['ja-JP', 'ja'], ['fr-FR', 'en']] as const) {
+  test(`preview follows ${locale} and has the correct identity`, async ({ page }) => {
+    await page.addInitScript(locale => Object.defineProperty(navigator, 'language', { value: locale }), locale); await page.goto('/');
+    await expect(page).toHaveTitle('GBF POWER REBORN');
+    await expect(page.locator('html')).toHaveAttribute('lang', language);
+    await expect(page.locator('.brand')).toHaveText('GBF POWER REBORN');
+    await expect(page.locator('.statusbar')).toContainText('v0.3.0');
+    await expect(page.locator('.start-button')).toBeDisabled();
+    await expect(page.getByRole('status')).toHaveText(dictionaries[language].stoppedNotice);
+  });
+}
+
+for (const language of ['ja', 'en'] as const) {
+  test(`${language} persists across reload and localizes runtime errors`, async ({ page }) => {
+    await openDesktop(page, { direct: true }); await menu(page);
+    await page.getByRole('menuitemradio', { name: languageNames[language], exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', language);
+    await page.reload(); await expect(page.locator('html')).toHaveAttribute('lang', language);
+    await menu(page);
+    const dictionary = dictionaries[language];
+    const port = page.getByLabel(dictionary.localPort); await port.fill('1'); await port.press('Enter');
+    await expect(page.getByRole('status')).toHaveText(dictionary['error.LISTEN_PORT_INVALID']);
+  });
+}
 
 test('only direct and proxy can be selected by keyboard or pointer', async ({ page }) => {
   await openDesktop(page, { direct: true });
@@ -167,7 +192,7 @@ test('menu has supported language and cache controls with keyboard navigation', 
   const root = await menu(page);
   await expect(root.locator(':scope > button')).toHaveText(['管理憑證›', '快取管理›', '開啟目錄', '複製 PAC 位址', '退出']);
   await expect(root.getByLabel('本機埠')).toHaveValue('8123');
-  await expect(root.getByRole('group', { name: '語言' }).locator('button')).toHaveText(['简体', '繁體']);
+  await expect(root.getByRole('group', { name: '語言' }).locator('button')).toHaveText(['简体', '繁體', '日本語', 'English']);
   await expect(page.getByRole('menuitem', { name: '管理憑證' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   const sub = page.locator('#certificate-menu');
@@ -368,10 +393,17 @@ test('missing network and cache samples remain unavailable, never zero', async (
   await expect(page.locator('.traffic strong')).toHaveText('↓ —↑ —');
 });
 
-for (const language of ['zh-CN', 'zh-TW'] as const) for (const mode of ['direct', 'proxy'] as const) for (const viewport of [{ width: 400, height: 520 }, { width: 400, height: 438 }, { width: 380, height: 420 }]) {
+for (const language of ['zh-CN', 'zh-TW', 'ja', 'en'] as const) for (const mode of ['direct', 'proxy'] as const) for (const viewport of [{ width: 400, height: 520 }, { width: 400, height: 438 }, { width: 380, height: 420 }]) {
   test(`${language} ${mode} layout ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await openDesktop(page, { direct: mode === 'direct' }); await page.setViewportSize(viewport); await menu(page);
-    await page.getByRole('menuitemradio', { name: language === 'zh-CN' ? '简体' : '繁體', exact: true }).click(); await page.keyboard.press('Escape');
+    await page.getByRole('menuitemradio', { name: languageNames[language], exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', language);
+    const languageBounds = await page.locator('.language-options button').evaluateAll(buttons => buttons.map(button => {
+      const box = button.getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(button); const text = range.getBoundingClientRect();
+      return { fits: text.left >= box.left - 1 && text.right <= box.right + 1, right: box.right };
+    }));
+    expect(languageBounds).toHaveLength(4); expect(languageBounds.every(value => value.fits && value.right <= viewport.width)).toBe(true);
+    await page.keyboard.press('Escape');
     const t = dictionaries[language]; await expect(page.locator('.connection-test')).toHaveCount(mode === 'proxy' ? 1 : 0);
     const cards = page.locator('.cache-summary .metric'); expect(await cards.count()).toBe(2);
     const a = await cards.nth(0).boundingBox(); const b = await cards.nth(1).boundingBox(); expect(a!.y + a!.height).toBeLessThanOrEqual(b!.y);
@@ -505,12 +537,12 @@ test('audit visibility pause preserves URL drafts and accepts completion after r
   await expect(page.getByLabel('代理 URL')).toHaveValue('http://draft@localhost:8855');
 });
 
-for (const language of ['zh-CN', 'zh-TW'] as const) test(`${language} audit dialog fits a constrained work area`, async ({ page }) => {
+for (const language of ['zh-CN', 'zh-TW', 'ja', 'en'] as const) test(`${language} audit dialog fits a constrained work area`, async ({ page }) => {
   await openDesktop(page, { direct: true }); await page.setViewportSize({ width: 380, height: 300 }); await menu(page);
-  await page.getByRole('menuitemradio', { name: language === 'zh-CN' ? '简体' : '繁體', exact: true }).click(); await page.keyboard.press('Escape');
+  await page.getByRole('menuitemradio', { name: languageNames[language], exact: true }).click(); await page.keyboard.press('Escape');
   const dialog = await auditDialog(page); const t = dictionaries[language];
   await expect(dialog.getByRole('status')).toContainText(t.auditDone);
-  await expect(dialog.getByRole('status')).toContainText(language === 'zh-TW' ? '已檢查 8 · 已修復 2 · 失敗 0' : '已检查 8 · 已修复 2 · 失败 0');
+  await expect(dialog.getByRole('status')).toContainText(translate(language, 'auditCounts', { checked: 8, repaired: 2, failed: 0 }));
   const box = await dialog.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(380); expect(box!.y + box!.height).toBeLessThanOrEqual(300);
   const button = await dialog.locator('[data-action="close-audit"]').boundingBox(); expect(button!.y + button!.height).toBeLessThanOrEqual(300);
 });

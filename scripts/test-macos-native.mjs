@@ -76,13 +76,18 @@ try {
   }
   summaries.push({ stage: 'startup-errors', passed: true, checks: ['visible-native-alert', 'nonzero-exit', 'unsupported-malformed-config-preserved'] });
   const port = await freePort();
-  await update({ port, proxyTestPort: tcpServer.address().port });
+  await update({ port, proxyTestPort: tcpServer.address().port, persistLanguage: 'en' });
   await writeFile(path.join(data, 'config.json'), JSON.stringify({ schemaVersion: 1, settings: { listenPort: await freePort() } }));
   await run('fresh');
   const saved = JSON.parse(await readFile(path.join(data, 'config.json'), 'utf8'));
   assert.equal(saved.schemaVersion, 1); assert.equal(saved.settings.listenPort, port);
   assert.deepEqual(saved.settings.cachePreferences, {prefetchEnabled:false, warmupEnabled:false});
-  await run('restart');
+  assert.equal(saved.settings.preferences.language, 'en');
+  await update({expectedLanguage: 'en', persistLanguage: 'ja'});
+  await run('restart-en');
+  assert.equal(JSON.parse(await readFile(path.join(data, 'config.json'), 'utf8')).settings.preferences.language, 'ja');
+  await update({expectedLanguage: 'ja', persistLanguage: 'zh-TW'});
+  await run('restart-ja');
   if (process.argv[3]) await writeFile(process.argv[3], JSON.stringify({ passed: true, summaries }, null, 2));
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill(); await exited; }

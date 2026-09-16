@@ -6,18 +6,24 @@ use tauri::{
 };
 
 pub fn text(language: Language, key: &str) -> String {
-    static MAPS: OnceLock<[HashMap<String, String>; 2]> = OnceLock::new();
+    static MAPS: OnceLock<[HashMap<String, String>; 4]> = OnceLock::new();
     let maps = MAPS.get_or_init(|| {
         [
             serde_json::from_str(include_str!("../../src/locales/zh-TW.json"))
                 .expect("valid translations"),
             serde_json::from_str(include_str!("../../src/locales/zh-CN.json"))
                 .expect("valid translations"),
+            serde_json::from_str(include_str!("../../src/locales/ja.json"))
+                .expect("valid translations"),
+            serde_json::from_str(include_str!("../../src/locales/en.json"))
+                .expect("valid translations"),
         ]
     });
     let index = match language {
         Language::Traditional => 0,
         Language::Simplified => 1,
+        Language::Japanese => 2,
+        Language::English => 3,
     };
     maps[index].get(key).cloned().unwrap_or_else(|| key.into())
 }
@@ -28,7 +34,7 @@ pub fn system_language() -> Language {
         languages
             .firstObject()
             .map(|s| Language::from_system(&s.to_string()))
-            .unwrap_or(Language::Traditional)
+            .unwrap_or(Language::English)
     }
     #[cfg(windows)]
     {
@@ -42,11 +48,11 @@ pub fn system_language() -> Language {
         if count > 1 {
             Language::from_system(&String::from_utf16_lossy(&buffer[..count as usize - 1]))
         } else {
-            Language::Traditional
+            Language::English
         }
     }
     #[cfg(not(any(target_os = "macos", windows)))]
-    Language::Traditional
+    Language::English
 }
 pub fn tray_menu(app: &tauri::AppHandle, language: Language) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, "show", text(language, "trayShow"), true, None::<&str>)?;
@@ -115,4 +121,57 @@ pub fn apply(app: &tauri::AppHandle, preferences: Preferences) -> tauri::Result<
         app.set_menu(Menu::with_items(app, &[&about, &edit])?)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_strings_and_placeholders_cover_all_languages() {
+        for (language, show, title) in [
+            (
+                Language::Traditional,
+                "顯示主視窗",
+                "GBF POWER REBORN 無法啟動",
+            ),
+            (
+                Language::Simplified,
+                "显示主窗口",
+                "GBF POWER REBORN 无法启动",
+            ),
+            (
+                Language::Japanese,
+                "メインウィンドウを表示",
+                "GBF POWER REBORN を起動できません",
+            ),
+            (
+                Language::English,
+                "Show window",
+                "Unable to start GBF POWER REBORN",
+            ),
+        ] {
+            assert_eq!(text(language, "trayShow"), show);
+            assert_eq!(text(language, "startupErrorTitle"), title);
+            assert!(text(language, "startupErrorMessage").contains("schemaVersion 1"));
+            assert!(text(language, "runtimeMissingFile").contains("{file}"));
+            for key in [
+                "trayQuit",
+                "editMenu",
+                "undo",
+                "redo",
+                "cut",
+                "copy",
+                "paste",
+                "selectAll",
+                "runtimeMissingLocales",
+                "runtimeUnavailable",
+                "runtimeInstallPrompt",
+            ] {
+                let translated = text(language, key);
+                assert!(!translated.trim().is_empty());
+                assert_ne!(translated, key);
+            }
+        }
+    }
 }

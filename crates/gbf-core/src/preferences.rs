@@ -37,12 +37,19 @@ pub enum Language {
     #[default]
     #[serde(rename = "zh-TW")]
     Traditional,
+    #[serde(rename = "ja")]
+    Japanese,
+    #[serde(rename = "en")]
+    English,
 }
 impl Language {
     pub fn from_system(value: &str) -> Self {
         let value = value.to_ascii_lowercase().replace('_', "-");
+        if value == "ja" || value.starts_with("ja-") {
+            return Self::Japanese;
+        }
         if !value.starts_with("zh") {
-            return Self::Traditional;
+            return Self::English;
         }
         if value.contains("hant") {
             return Self::Traditional;
@@ -75,17 +82,18 @@ mod tests {
             ("zh-Hant-CN", Language::Traditional),
             ("zh_TW", Language::Traditional),
             ("zh-SG", Language::Simplified),
-            ("en-GB", Language::Traditional),
-            ("ja-JP", Language::Traditional),
-            ("ja_JP", Language::Traditional),
-            ("ja", Language::Traditional),
-            ("fr-FR", Language::Traditional),
+            ("en-GB", Language::English),
+            ("ja-JP", Language::Japanese),
+            ("ja_JP", Language::Japanese),
+            ("ja", Language::Japanese),
+            ("fr-FR", Language::English),
+            ("", Language::English),
         ] {
             assert_eq!(Language::from_system(locale), language);
         }
         assert_eq!(Preferences::default().language, Language::Traditional);
         let preferences = Preferences {
-            language: Language::Traditional,
+            language: Language::Japanese,
             ..Default::default()
         };
         let json = serde_json::to_string(&preferences).unwrap();
@@ -93,9 +101,28 @@ mod tests {
             serde_json::from_str::<Preferences>(&json).unwrap(),
             preferences
         );
-        assert!(json.contains("\"zh-TW\""));
+        assert!(json.contains("\"ja\""));
+        for language in [
+            Language::Traditional,
+            Language::Simplified,
+            Language::Japanese,
+            Language::English,
+        ] {
+            let value = Preferences {
+                language,
+                theme: Theme::Auto,
+            };
+            assert_eq!(
+                serde_json::from_str::<Preferences>(&serde_json::to_string(&value).unwrap())
+                    .unwrap(),
+                value
+            );
+        }
         assert!(
             serde_json::from_str::<Preferences>(r#"{"theme":"rainbow","language":"en"}"#).is_err()
+        );
+        assert!(
+            serde_json::from_str::<Preferences>(r#"{"theme":"auto","language":"fr"}"#).is_err()
         );
     }
 }

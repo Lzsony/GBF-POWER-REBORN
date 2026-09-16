@@ -10,17 +10,16 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
 
-fn localized(traditional: &str, simplified: &str) -> String {
-    if crate::appearance::system_language() == gbf_core::preferences::Language::Simplified {
-        simplified.to_owned()
-    } else {
-        traditional.to_owned()
-    }
+fn localized(key: &str) -> String {
+    crate::appearance::text(crate::appearance::system_language(), key)
 }
 
 pub fn startup_error(error: &dyn std::fmt::Display) {
-    let prefix = localized("無法啟動 GBF POWER REBORN", "无法启动 GBF POWER REBORN");
-    self::error(&format!("{prefix}：\n{error}"));
+    self::error(&format!(
+        "{}\n{}\n\n{error}",
+        localized("startupErrorTitle"),
+        localized("startupErrorMessage")
+    ));
 }
 
 pub fn error(message: &str) {
@@ -42,14 +41,11 @@ fn validate_fixed(path: &Path) -> Result<()> {
         "resources.pak",
     ] {
         if !path.join(file).is_file() {
-            bail!(localized(&format!("隨附 WebView2 Runtime 不完整：缺少 {file}。請重新解壓 portable_webview2 套件。"), &format!("随附 WebView2 Runtime 不完整：缺少 {file}。请重新解压 portable_webview2 套件。")));
+            bail!(localized("runtimeMissingFile").replace("{file}", file));
         }
     }
     if !path.join("Locales").is_dir() {
-        bail!(localized(
-            "隨附 WebView2 Runtime 缺少 Locales，請重新解壓完整套件。",
-            "随附 WebView2 Runtime 缺少 Locales，请重新解压完整套件。"
-        ));
+        bail!(localized("runtimeMissingLocales"));
     }
     Ok(())
 }
@@ -71,20 +67,13 @@ pub fn prepare() -> Result<()> {
     if expected_fixed || fixed.try_exists()? {
         validate_fixed(&fixed)?;
         std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", &fixed);
-        tauri::webview_version().map_err(|e| {
-            anyhow::anyhow!(
-                "{}：{e}",
-                localized(
-                    "隨附 WebView2 Runtime 無法使用，請重新解壓完整套件",
-                    "随附 WebView2 Runtime 无法使用，请重新解压完整套件"
-                )
-            )
-        })?;
+        tauri::webview_version()
+            .map_err(|e| anyhow::anyhow!("{}：{e}", localized("runtimeUnavailable")))?;
     } else {
         // Do not let a stale process environment redirect the lightweight package.
         std::env::remove_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER");
         if tauri::webview_version().is_err() {
-            let message = wide(&localized("此電腦缺少可用的 Microsoft WebView2 Runtime。\n請安裝 Evergreen Runtime 後重新啟動，或使用 portable_webview2 完整套件。\n\n是否開啟 Microsoft 官方下載頁？", "此电脑缺少可用的 Microsoft WebView2 Runtime。\n请安装 Evergreen Runtime 后重新启动，或使用 portable_webview2 完整套件。\n\n是否打开 Microsoft 官方下载页？"));
+            let message = wide(&localized("runtimeInstallPrompt"));
             let answer = unsafe {
                 MessageBoxW(
                     std::ptr::null_mut(),

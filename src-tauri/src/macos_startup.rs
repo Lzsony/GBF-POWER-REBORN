@@ -7,18 +7,15 @@ pub fn error() {
         return;
     };
     let alert = NSAlert::new(main);
-    let simplified =
-        crate::appearance::system_language() == gbf_core::preferences::Language::Simplified;
-    alert.setMessageText(&NSString::from_str(if simplified {
-        "GBF POWER REBORN 无法启动"
-    } else {
-        "GBF POWER REBORN 無法啟動"
-    }));
-    alert.setInformativeText(&NSString::from_str(if simplified {
-        "无法读取配置或初始化应用程序。此版本要求 schemaVersion 1；请检查应用数据的格式与访问权限。现有数据不会自动重置。"
-    } else {
-        "無法讀取設定或初始化應用程式。此版本要求 schemaVersion 1；請檢查應用資料的格式與存取權限。現有資料不會自動重設。"
-    }));
+    let language = crate::appearance::system_language();
+    alert.setMessageText(&NSString::from_str(&crate::appearance::text(
+        language,
+        "startupErrorTitle",
+    )));
+    alert.setInformativeText(&NSString::from_str(&crate::appearance::text(
+        language,
+        "startupErrorMessage",
+    )));
     #[cfg(feature = "internal-test")]
     if std::env::var_os("GBF_INTERNAL_TEST_STARTUP_ERROR").is_some() {
         use objc2_app_kit::{NSApplication, NSModalPanelRunLoopMode};

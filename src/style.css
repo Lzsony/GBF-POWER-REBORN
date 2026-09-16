@@ -13,6 +13,7 @@
   --dim: #8597a8; --accent: #80d3dc; --primary: #69cdd9; --primary-text: #14262d;
   --stop: #b74757; --focus: #78dbe4; --error: #ff9a92; --overlay: #080c11b8; color-scheme: dark;
 }
+:root:lang(ja) { font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 html { overflow-x: clip; }

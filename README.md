@@ -4,7 +4,7 @@ GBF POWER REBORN 是面向 macOS 與 Windows 的網路體驗優化專案，透�
 
 ## 開發狀態
 
-**0.2.0 客戶端開發版。** 提供直連、上游代理與本機快取，介面支援簡體及繁體中文。加速選項尚未開放；Control、SSH Gateway 與服務端部署工具尚未實作。平台驗證範圍見[驗證紀錄](docs/validation.md)。
+**0.3.0 客戶端開發版。** 提供直連、上游代理與本機快取，介面支援简体、繁體、日本語與 English。加速選項尚未開放；Control、SSH Gateway 與服務端部署工具尚未實作。平台驗證範圍見[驗證紀錄](docs/validation.md)。
 
 ## 平台與技術棧
 

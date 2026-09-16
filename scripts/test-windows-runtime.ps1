@@ -53,7 +53,8 @@ try {
       }
       if ($Dialog -eq [IntPtr]::Zero) { throw "No native Runtime error dialog: $Case" }
       $Text = [GbfRuntimeDialog]::Text($Dialog)
-      if ($Text -notlike '*WebView2 Runtime*' -or $Text -notlike '*portable_webview2*') { throw "Unexpected Runtime error: $Text" }
+      $MissingFile = if ($Case -eq 'missing') { 'msedgewebview2.exe' } else { 'msedge.dll' }
+      if ($Text -notlike '*WebView2 Runtime*' -or !$Text.Contains($MissingFile)) { throw "Unexpected Runtime error: $Text" }
       [GbfRuntimeDialog]::SendMessage($Dialog,0x10,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
       $Exited = $Child.WaitForExit(5000)
       if (!$Exited -or $Child.ExitCode -ne 1) { throw "Runtime error did not exit with failure: exited=$Exited code=$($Child.ExitCode)" }

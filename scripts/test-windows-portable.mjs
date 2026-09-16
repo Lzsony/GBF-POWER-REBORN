@@ -106,7 +106,12 @@ try {
   }
 
   await page.locator('.menu-trigger').click();
-  await page.getByRole('menuitemradio',{name:'繁體',exact:true}).click();
+  for (const [language, name] of [['zh-CN','简体'],['ja','日本語'],['en','English'],['zh-TW','繁體']]) {
+    await page.getByRole('menuitemradio',{name,exact:true}).click();
+    await expect(page.locator('html')).toHaveAttribute('lang',language);
+    await expect.poll(async () => (await invoke('get_status')).preferences.language).toBe(language);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
   await page.keyboard.press('Escape');
   await expect(page.getByLabel('模式',{exact:true})).toHaveValue('direct');
   await page.locator('.start-button').click();

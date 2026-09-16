@@ -1,4 +1,4 @@
-export type Language = 'zh-CN' | 'zh-TW';
+export type Language = 'zh-CN' | 'zh-TW' | 'ja' | 'en';
 export type Preferences = { theme: 'light' | 'dark' | 'auto'; language: Language };
 export type CachePreferences = { prefetchEnabled: boolean; warmupEnabled: boolean };
 export type AuditProgress = { running: boolean; cancelled: boolean; checked: number; repaired: number; failed: number };

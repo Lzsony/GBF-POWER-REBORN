@@ -20,8 +20,8 @@
       await document.fonts.ready;
       let initial = await invoke('get_status');
       const fixture = (await control('snapshot')).fixture;
-        if (fixture?.stage === 'restart') {
-          check(initial.preferences.language === 'zh-TW' && initial.preferences.theme === 'auto', 'preferences not persisted');
+        if (fixture?.stage?.startsWith('restart')) {
+          check(initial.preferences.language === fixture.expectedLanguage && initial.preferences.theme === 'auto', 'preferences not persisted');
           check(initial.settings.listenPort === fixture.port, 'port not persisted');
           check(initial.cachePreferences.prefetchEnabled === false && initial.cachePreferences.warmupEnabled === false, 'cache preferences not persisted');
           checks.push('schema1-restart-persistence', 'cache-preferences-restart-persistence');
@@ -37,9 +37,9 @@
           await until(async () => (await invoke('get_status')).settings.listenPort === fixture.port, 'port saved through React');
           initial = await invoke('get_status');
         }
-        for (const language of ['zh-CN', 'zh-TW']) {
+        for (const language of ['ja', 'en', 'zh-CN', 'zh-TW']) {
           const button = document.querySelector(`.language-options button[lang="${language}"]`);
-          button.click();
+          if (button.getAttribute('aria-checked') !== 'true') button.click();
           await until(() => button.getAttribute('aria-checked') === 'true' && button.getAttribute('aria-disabled') !== 'true', language);
           for (let theme = 0; theme < 3; theme++) {
             const item = document.querySelectorAll('.theme-options button')[theme];
@@ -55,7 +55,7 @@
           }
         }
         document.querySelector('.menu-trigger').click();
-        checks.push('two-languages-three-themes-native-layout');
+        checks.push('four-languages-three-themes-native-layout');
         check(innerWidth===400 && innerHeight===520, 'native content size must be 400x520, got '+innerWidth+'x'+innerHeight+' '+JSON.stringify(await control('snapshot')));
         const change = (node,value) => {
           const proto=node instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
@@ -171,6 +171,15 @@
         await control('show');
         await until(async () => (await control('snapshot')).statusReads > before, 'poll resumes');
         checks.push('hidden-polling-suspended', 'hidden-tray-start-stop', 'pac-http', 'visible-polling-resumes');
+      if (fixture.persistLanguage) {
+        if (document.querySelector('.menu-trigger').getAttribute('aria-expanded') !== 'true') document.querySelector('.menu-trigger').click();
+        await until(() => document.querySelector(`.language-options button[lang="${fixture.persistLanguage}"]`), 'language to persist');
+        const languageButton = document.querySelector(`.language-options button[lang="${fixture.persistLanguage}"]`);
+        languageButton.click();
+        await until(async () => (await invoke('get_status')).preferences.language === fixture.persistLanguage && languageButton.getAttribute('aria-disabled') !== 'true', 'language persisted');
+        document.querySelector('.menu-trigger').click();
+        checks.push('persist-language-' + fixture.persistLanguage);
+      }
       await control('audit-hold');
       await invoke('start_cache_audit');
       await until(async () => (await invoke('get_native_control')).state.maintenance, 'audit held before exit');

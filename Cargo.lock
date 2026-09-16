@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "gbf-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1417,7 +1417,7 @@ dependencies = [
 
 [[package]]
 name = "gbf-power-reborn"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "block2",

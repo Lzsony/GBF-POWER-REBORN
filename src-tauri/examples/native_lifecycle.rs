@@ -255,6 +255,8 @@ async fn smoke(app: tauri::AppHandle) -> Result<(), String> {
     for (language, expected) in [
         (Language::Simplified, "显示主窗口"),
         (Language::Traditional, "顯示主視窗"),
+        (Language::Japanese, "メインウィンドウを表示"),
+        (Language::English, "Show window"),
     ] {
         ui(&app, move |app| {
             appearance::apply(
@@ -274,7 +276,7 @@ async fn smoke(app: tauri::AppHandle) -> Result<(), String> {
         })
         .await?;
     }
-    println!("PASS: native light/dark/auto and two-language menus");
+    println!("PASS: native light/dark/auto and four-language menus");
     tray_smoke(&app).await?;
     #[cfg(windows)]
     ui(&app, |app| {
@@ -568,7 +570,12 @@ async fn tray_smoke(app: &tauri::AppHandle) -> Result<(), String> {
     if !core.control_state().running {
         return Err("tray start did not start proxy".into());
     }
-    for language in [Language::Simplified, Language::Traditional] {
+    for language in [
+        Language::Simplified,
+        Language::Traditional,
+        Language::Japanese,
+        Language::English,
+    ] {
         core.save_preferences(Preferences {
             language,
             theme: Theme::Auto,
@@ -622,6 +629,6 @@ async fn tray_smoke(app: &tauri::AppHandle) -> Result<(), String> {
         Ok(())
     })
     .await?;
-    println!("PASS: native tray hidden start/stop, double-click dedup, two-language running state, bind failure recovery and listener cleanup");
+    println!("PASS: native tray hidden start/stop, double-click dedup, four-language running state, bind failure recovery and listener cleanup");
     Ok(())
 }
