@@ -81,6 +81,7 @@ try {
   await run('fresh');
   const saved = JSON.parse(await readFile(path.join(data, 'config.json'), 'utf8'));
   assert.equal(saved.schemaVersion, 1); assert.equal(saved.settings.listenPort, port);
+  assert.deepEqual(saved.settings.cachePreferences, {prefetchEnabled:false, warmupEnabled:false});
   await run('restart');
   if (process.argv[3]) await writeFile(process.argv[3], JSON.stringify({ passed: true, summaries }, null, 2));
 } finally {

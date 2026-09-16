@@ -122,5 +122,17 @@
   "proxySaved": "设置已保存",
   "testingConnection": "测试中…",
   "quitting": "正在退出…",
-  "accelerateUnavailable": "加速（暂未开放）"
+  "accelerateUnavailable": "加速（暂未开放）",
+  "prefetchEnabled": "素材预取",
+  "warmupEnabled": "内存预热",
+  "auditTitle": "检查缓存…",
+  "auditRunning": "正在检查缓存…",
+  "auditCancelled": "检查已取消",
+  "auditDone": "检查完成",
+  "auditCounts": "已检查 {checked} · 已修复 {repaired} · 失败 {failed}",
+  "error.CACHE_AUDIT_FAILED": "无法完成缓存检查。",
+  "auditStarting": "正在开始检查…",
+  "auditCancelling": "正在取消检查…",
+  "auditFailed": "检查未完成",
+  "auditIssues": "检查完成，部分项目处理失败"
 }

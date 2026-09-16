@@ -172,6 +172,9 @@ impl<S: AsyncRead + Unpin> AsyncRead for Metered<S> {
         self.metrics
             .received
             .fetch_add((buf.filled().len() - before) as u64, Ordering::Relaxed);
+        if buf.filled().len() > before {
+            self.metrics.tunnel_activity();
+        }
         poll
     }
 }
@@ -184,6 +187,9 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Metered<S> {
         let poll = Pin::new(&mut self.inner).poll_write(cx, bytes);
         if let Poll::Ready(Ok(n)) = poll {
             self.metrics.sent.fetch_add(n as u64, Ordering::Relaxed);
+            if n > 0 {
+                self.metrics.tunnel_activity();
+            }
         }
         poll
     }

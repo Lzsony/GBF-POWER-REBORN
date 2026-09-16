@@ -26,6 +26,7 @@ pub struct Settings {
     pub close_to_tray: bool,
     pub autostart: bool,
     pub preferences: crate::preferences::Preferences,
+    pub cache_preferences: crate::preferences::CachePreferences,
 }
 
 impl Default for Settings {
@@ -42,6 +43,7 @@ impl Default for Settings {
             close_to_tray: true,
             autostart: false,
             preferences: Default::default(),
+            cache_preferences: Default::default(),
         }
     }
 }

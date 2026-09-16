@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import type { CertificateStatus, Preferences, Settings } from './types';
+import type { CachePreferences, CertificateStatus, Preferences, Settings } from './types';
 import type { MessageKey } from './i18n';
 
-export type MenuAction = 'install' | 'openCertificate' | 'check' | 'remove' | 'clear' | 'data' | 'quit';
+export type MenuAction = 'install' | 'openCertificate' | 'check' | 'remove' | 'clear' | 'data' | 'quit' | 'audit';
 type Props = {
   quitting:boolean;
   onCommitListenPort:()=>void;onCommitCacheLimit:()=>void;
+  cachePreferences: CachePreferences; cacheBusy: boolean; auditRunning: boolean;
+  onCachePreference: (patch: Partial<CachePreferences>) => Promise<void>;
   cacheUsage: string; onCacheLimit: (value: number) => void;
   t: (key: MessageKey) => string; preferences: Preferences; certificate: CertificateStatus;
   settings: Settings;
@@ -140,7 +142,7 @@ export default function SettingsMenu(props: Props) {
     if (next) { event.preventDefault(); event.stopPropagation(); next.focus(); if (!sub && next !== certificateTrigger.current && next !== cacheTrigger.current) setSubOpen(false); }
   }
   const item = (row: number, label: MessageKey, action: MenuAction, unavailable = disabled) => <button type="button" role="menuitem" tabIndex={-1} data-row={row} className="menu-item" disabled={unavailable} onPointerEnter={scheduleSubClose} onClick={() => act(action)}>{t(label)}</button>;
-  const child = (label: MessageKey, action: MenuAction, unavailable: boolean) => <button type="button" role="menuitem" tabIndex={-1} className="menu-item" disabled={unavailable} onClick={() => act(action)}>{t(label)}</button>;
+  const child = (label: MessageKey, action: MenuAction, unavailable: boolean) => <button type="button" role="menuitem" tabIndex={-1} className="menu-item" data-action={action} disabled={unavailable} onClick={() => act(action)}>{t(label)}</button>;
 
   return <div className="settings-menu" ref={wrapper}>
     <button type="button" ref={trigger} className="menu-trigger" aria-label={t('menu')} aria-haspopup="menu" aria-expanded={open} aria-controls="settings-menu-panel" onClick={() => { if (open) close(); else setOpen(true); }} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); } }}>
@@ -148,7 +150,7 @@ export default function SettingsMenu(props: Props) {
     </button>
     {open && <div ref={panel} id="settings-menu-panel" className="menu-panel" role="menu" aria-label={t('menu')} aria-hidden={inlineSub || undefined} inert={inlineSub} style={position} onKeyDown={event => keys(event)}>
       <button type="button" ref={certificateTrigger} role="menuitem" tabIndex={-1} data-row={0} className="menu-item" aria-haspopup="menu" aria-expanded={subOpen && subKind === 'certificate'} aria-controls="certificate-menu" onPointerEnter={() => hoverSub('certificate')} onClick={() => openSub(true)}><span>{t('manageCertificate')}</span><span aria-hidden="true">›</span></button>
-      <button type="button" ref={cacheTrigger} role="menuitem" tabIndex={-1} data-row={1} className="menu-item" aria-haspopup="menu" aria-expanded={subOpen && subKind === 'cache'} aria-controls="cache-menu" onPointerEnter={() => hoverSub('cache')} onClick={() => openSub(true, 'cache')}><span>{t('manageCache')}</span><span aria-hidden="true">›</span></button>
+      <button type="button" ref={cacheTrigger} role="menuitem" tabIndex={-1} data-row={1} data-action="cache-menu" className="menu-item" aria-haspopup="menu" aria-expanded={subOpen && subKind === 'cache'} aria-controls="cache-menu" onPointerEnter={() => hoverSub('cache')} onClick={() => openSub(true, 'cache')}><span>{t('manageCache')}</span><span aria-hidden="true">›</span></button>
       {item(2, 'openDirectory', 'data')}
       <div className="menu-separator" role="separator"/>
       <label className="menu-port"><span>{t('localPort')}</span><input data-row={3} aria-label={t('localPort')} type="number" min="1024" max="65535" value={settings.listenPort} disabled={disabled || running} onChange={event => onListenPort(Number(event.target.value))} onBlur={props.onCommitListenPort} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();props.onCommitListenPort();}}}/></label>
@@ -176,7 +178,10 @@ export default function SettingsMenu(props: Props) {
         <div role="menuitem" aria-disabled="true" className="menu-status cache-usage">{t('used')} <span className="numeric">{props.cacheUsage}</span></div>
         <label className="menu-port menu-cache-limit"><span>{t('limit')}</span><input aria-label={t('limit')} type="number" min="1" max="100" value={settings.cacheLimitGb} disabled={disabled || running} onChange={event => props.onCacheLimit(Number(event.target.value))} onBlur={props.onCommitCacheLimit} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();props.onCommitCacheLimit();}}}/><span>GB</span></label>
         <div className="menu-separator" role="separator"/>
-        {child('clearCacheMenu', 'clear', disabled || running)}
+        {(['prefetchEnabled', 'warmupEnabled'] as const).map(key => <label key={key} className="menu-item checkbox"><input type="checkbox" role="menuitemcheckbox" aria-label={t(key)} checked={props.cachePreferences[key]} disabled={disabled || props.auditRunning || props.cacheBusy} aria-busy={props.cacheBusy || undefined} onChange={event => void props.onCachePreference({ [key]: event.target.checked })}/><span>{t(key)}</span></label>)}
+        <div className="menu-separator" role="separator"/>
+        {child('auditTitle', 'audit', disabled || running || props.auditRunning)}
+        {child('clearCacheMenu', 'clear', disabled || running || props.auditRunning)}
       </>}
     </div>}
   </div>;

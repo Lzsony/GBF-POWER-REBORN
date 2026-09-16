@@ -122,5 +122,17 @@
   "proxySaved": "設定已保存",
   "testingConnection": "測試中…",
   "quitting": "正在退出…",
-  "accelerateUnavailable": "加速（尚未開放）"
+  "accelerateUnavailable": "加速（尚未開放）",
+  "prefetchEnabled": "素材預取",
+  "warmupEnabled": "記憶體預熱",
+  "auditTitle": "檢查快取…",
+  "auditRunning": "正在檢查快取…",
+  "auditCancelled": "檢查已取消",
+  "auditDone": "檢查完成",
+  "auditCounts": "已檢查 {checked} · 已修復 {repaired} · 失敗 {failed}",
+  "error.CACHE_AUDIT_FAILED": "無法完成快取檢查。",
+  "auditStarting": "正在開始檢查…",
+  "auditCancelling": "正在取消檢查…",
+  "auditFailed": "檢查未完成",
+  "auditIssues": "檢查完成，部分項目處理失敗"
 }

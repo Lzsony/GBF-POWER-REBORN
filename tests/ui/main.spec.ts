@@ -9,6 +9,7 @@ type Options = {
   preferencesDelay?: number; preferencesFailure?: boolean;
   failTest?: boolean; holdProxyTest?: boolean; proxySaveFailure?: boolean;
   switchFailure?: boolean; restoreFailure?: boolean;
+  cacheDelay?: number; cacheFailure?: boolean; holdAudit?: boolean; startAuditFailure?: boolean; cancelAuditFailure?: boolean; auditFailures?: number;
 };
 async function desktop(page: Page, options: Options = {}) {
   await page.addInitScript(({ initial, options }) => {
@@ -19,6 +20,8 @@ async function desktop(page: Page, options: Options = {}) {
     state.settings.hasAuthentication = true;
     const savedSettings = sessionStorage.getItem('test-settings');
     if (savedSettings) state.settings = JSON.parse(savedSettings);
+    const savedCachePreferences = sessionStorage.getItem('test-cache-preferences');
+    if (savedCachePreferences) state.cachePreferences = JSON.parse(savedCachePreferences);
     const savedPreferences = sessionStorage.getItem('test-preferences');
     if (savedPreferences) state.preferences = JSON.parse(savedPreferences);
     if (!options.missingSamples) Object.assign(state.metrics.network, {
@@ -32,6 +35,8 @@ async function desktop(page: Page, options: Options = {}) {
     let callbackId = 0;
     Object.assign(window, {
       isTauri: true, __commands: commands,
+      __finishAudit: (failed = 0) => { Object.assign(state.audit, { running: false, cancelled: false, checked: 8, repaired: 2, failed }); },
+      __auditProgress: (checked: number, repaired: number) => { Object.assign(state.audit, { checked, repaired }); },
       __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener: (_event: string, id: number) => callbacks.delete(id) },
       __emitVisibility: (visible: boolean) => callbacks.forEach((cb, id) => {
         if (events.get(id) === 'main-visibility') cb({ event: 'main-visibility', payload: visible });
@@ -53,6 +58,21 @@ async function desktop(page: Page, options: Options = {}) {
             if (options.revealDelay) await new Promise(r => setTimeout(r, options.revealDelay));
             if (options.revealFailure) throw { code: 'SECRET_READ_FAILED' };
             return savedUrl;
+          }
+          if (command === 'save_cache_preferences') {
+            if (options.cacheDelay) await new Promise(resolve => setTimeout(resolve, options.cacheDelay));
+            if (options.cacheFailure) throw { code: 'CONFIG_WRITE_FAILED' };
+            Object.assign(state.cachePreferences, args.patch);
+            sessionStorage.setItem('test-cache-preferences', JSON.stringify(state.cachePreferences));
+            return structuredClone(state.cachePreferences);
+          }
+          if (command === 'start_cache_audit') {
+            if (options.startAuditFailure) throw { code: 'CACHE_AUDIT_FAILED' };
+            state.audit = { running: !!options.holdAudit, cancelled: false, checked: options.holdAudit ? 0 : 8, repaired: options.holdAudit ? 0 : 2, failed: options.auditFailures ?? 0 };
+          }
+          if (command === 'cancel_cache_audit') {
+            if (options.cancelAuditFailure) throw { code: 'CACHE_AUDIT_FAILED' };
+            state.audit.running = false; state.audit.cancelled = true;
           }
           if (command === 'save_settings') {
             const input = args.input as typeof state.settings;
@@ -126,7 +146,7 @@ test('preview uses Traditional Chinese on an English system and has the correct 
   await expect(page).toHaveTitle('GBF POWER REBORN');
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW');
   await expect(page.locator('.brand')).toHaveText('GBF POWER REBORN');
-  await expect(page.locator('.statusbar')).toContainText('v0.1.0');
+  await expect(page.locator('.statusbar')).toContainText('v0.2.0');
   await expect(page.locator('.start-button')).toBeDisabled();
 });
 
@@ -142,7 +162,7 @@ test('only direct and proxy can be selected by keyboard or pointer', async ({ pa
   await expect(page.locator('.statistics .metric').first()).toHaveText('線路延遲—');
 });
 
-test('menu has only supported language and cache controls with keyboard navigation', async ({ page }) => {
+test('menu has supported language and cache controls with keyboard navigation', async ({ page }) => {
   await openDesktop(page); await page.setViewportSize({ width: 820, height: 650 });
   const root = await menu(page);
   await expect(root.locator(':scope > button')).toHaveText(['管理憑證›', '快取管理›', '開啟目錄', '複製 PAC 位址', '退出']);
@@ -157,7 +177,9 @@ test('menu has only supported language and cache controls with keyboard navigati
   await expect(page.locator('#cache-menu')).toBeVisible();
   await expect(page.getByLabel('上限')).toHaveValue('5');
   await expect(page.getByRole('menuitem', { name: '清理快取…' })).toBeVisible();
-  await expect(page.locator('#cache-menu input[type=checkbox]')).toHaveCount(0);
+  await expect(page.locator('#cache-menu input[type=checkbox]')).toHaveCount(2);
+  await expect(page.getByRole('menuitemcheckbox', { name: '素材預取' })).toBeChecked();
+  await expect(page.getByRole('menuitemcheckbox', { name: '記憶體預熱' })).toBeChecked();
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: '選單', exact: true })).toBeFocused();
   expect((await commands(page)).some(c => /authorization|audit|warmup|prefetch/.test(c.command))).toBe(false);
@@ -282,11 +304,11 @@ test('successful live mode switches preserve service state and stop is red', asy
   await page.locator('.start-button').click(); await expect(page.locator('.start-button')).not.toHaveClass(/is-running/);
 });
 
-test('certificate install, clear and quit commands run without obsolete dialogs', async ({ page }) => {
+test('certificate install, clear and quit commands do not open a dialog', async ({ page }) => {
   await openDesktop(page); await menu(page); await page.getByRole('menuitem', { name: '管理憑證' }).click();
   await page.getByRole('menuitem', { name: '安裝憑證', exact: true }).click(); await expect(page.getByLabel('本機快取')).toBeEnabled();
   await menu(page); await page.getByRole('menuitem', { name: '快取管理' }).click(); await page.getByRole('menuitem', { name: '清理快取…' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0); expect((await commands(page)).filter(c => c.command === 'clear_cache')).toHaveLength(1);
+  await expect(page.getByRole('dialog')).not.toBeVisible(); expect((await commands(page)).filter(c => c.command === 'clear_cache')).toHaveLength(1);
   await menu(page); await page.getByRole('menuitem', { name: '退出', exact: true }).click();
   expect((await commands(page)).filter(c => c.command === 'quit_app')).toHaveLength(1);
 });
@@ -373,4 +395,122 @@ for (const scale of [1, 1.25, 1.5, 2]) test.describe(`simulated Windows DPI ${sc
     const box = await page.locator('.statusbar').boundingBox(); expect(box!.y).toBeGreaterThanOrEqual(0); expect(box!.y + box!.height).toBeLessThanOrEqual(421);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
+});
+
+async function cacheMenu(page: Page) {
+  await menu(page); await page.locator('[data-action="cache-menu"]').click();
+  return page.locator('#cache-menu');
+}
+async function auditDialog(page: Page) {
+  await cacheMenu(page); await page.locator('[data-action="audit"]').click();
+  const dialog = page.locator('.audit-dialog'); await expect(dialog).toBeVisible(); return dialog;
+}
+
+test('cache preferences persist independently while preserving an unsaved proxy URL', async ({ page }) => {
+  await openDesktop(page); const draft = 'http://draft@localhost:8111';
+  await page.getByLabel('代理 URL').fill(draft); await cacheMenu(page);
+  await page.getByRole('menuitemcheckbox', { name: '素材預取' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '素材預取' })).not.toBeChecked();
+  await page.getByRole('menuitemcheckbox', { name: '記憶體預熱' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '記憶體預熱' })).not.toBeChecked();
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await expect(page.getByLabel('代理 URL')).toHaveValue(draft);
+  expect((await commands(page)).filter(c => c.command === 'save_settings')).toHaveLength(0);
+  expect((await commands(page)).filter(c => c.command === 'save_cache_preferences').map(c => c.args.patch)).toEqual([{ prefetchEnabled: false }, { warmupEnabled: false }]);
+  await page.reload(); await cacheMenu(page);
+  await expect(page.getByRole('menuitemcheckbox', { name: '素材預取' })).not.toBeChecked();
+  await expect(page.getByRole('menuitemcheckbox', { name: '記憶體預熱' })).not.toBeChecked();
+});
+
+test('cache preference save failure restores controls without overwriting URL drafts', async ({ page }) => {
+  await openDesktop(page, { cacheDelay: 200, cacheFailure: true });
+  await page.getByLabel('代理 URL').fill('socks5://draft@localhost:9911'); await cacheMenu(page);
+  await page.getByRole('menuitemcheckbox', { name: '素材預取' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '記憶體預熱' })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: '檢查快取…' })).toBeDisabled();
+  await expect(page.getByRole('status')).toHaveText(dictionaries['zh-TW']['error.CONFIG_WRITE_FAILED']);
+  await expect(page.getByRole('menuitemcheckbox', { name: '素材預取' })).toBeChecked();
+  await expect(page.getByRole('menuitemcheckbox', { name: '素材預取' })).toBeEnabled();
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await expect(page.getByLabel('代理 URL')).toHaveValue('socks5://draft@localhost:9911');
+  expect((await commands(page)).filter(c => c.command === 'save_settings')).toHaveLength(0);
+});
+
+test('running allows background toggles but locks audit, clear and capacity', async ({ page }) => {
+  await openDesktop(page, { direct: true }); await page.locator('.start-button').click(); await cacheMenu(page);
+  await expect(page.getByRole('menuitem', { name: '檢查快取…' })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: '清理快取…' })).toBeDisabled(); await expect(page.getByLabel('上限')).toBeDisabled();
+  await page.getByRole('menuitemcheckbox', { name: '記憶體預熱' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '記憶體預熱' })).not.toBeChecked();
+  await expect(page.locator('.start-button')).toHaveClass(/is-running/);
+});
+
+test('audit shows completed progress, closes and can be started again', async ({ page }) => {
+  await openDesktop(page, { direct: true }); const dialog = await auditDialog(page);
+  await expect(dialog.getByRole('status')).toContainText('檢查完成');
+  await expect(dialog.getByRole('status')).toContainText('已檢查 8 · 已修復 2 · 失敗 0');
+  await dialog.locator('[data-action="close-audit"]').click(); await expect(dialog).not.toBeVisible();
+  await auditDialog(page); await expect(dialog.getByRole('status')).toContainText('檢查完成');
+  expect((await commands(page)).filter(c => c.command === 'start_cache_audit')).toHaveLength(2);
+});
+
+test('running audit updates progress, blocks other actions and can cancel during maintenance', async ({ page }) => {
+  await openDesktop(page, { direct: true, holdAudit: true }); const dialog = await auditDialog(page);
+  await expect(dialog.getByRole('status')).toContainText('正在檢查快取');
+  await expect(page.locator('.start-button')).toBeDisabled(); await expect(page.getByLabel('模式', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('登入時啟動')).toBeDisabled();
+  await page.keyboard.press('Escape'); await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '關閉對話框', exact: true })).toBeDisabled();
+  await page.evaluate(() => { (window as any).__auditProgress(4, 1); (window as any).__emitNative({ state: { running: false, busy: false, maintenance: true, shuttingDown: false }, notice: null }); });
+  await expect(dialog.getByRole('status')).toContainText('已檢查 4 · 已修復 1');
+  await expect(dialog.locator('[data-action="cancel-audit"]')).toBeEnabled();
+  await dialog.locator('[data-action="cancel-audit"]').click();
+  await expect(dialog.getByRole('status')).toContainText('檢查已取消');
+  await page.evaluate(() => (window as any).__emitNative({ state: { running: false, busy: false, maintenance: false, shuttingDown: false }, notice: null }));
+  await dialog.locator('[data-action="close-audit"]').click(); await expect(page.locator('.start-button')).toBeEnabled();
+});
+
+test('audit startup failure is localized and leaves the dialog closable', async ({ page }) => {
+  await openDesktop(page, { direct: true, startAuditFailure: true }); const dialog = await auditDialog(page);
+  await expect(dialog.getByRole('status')).toContainText('檢查未完成');
+  await expect(dialog.getByRole('alert')).toHaveText(dictionaries['zh-TW']['error.CACHE_AUDIT_FAILED']);
+  await dialog.locator('[data-action="close-audit"]').click(); await expect(dialog).not.toBeVisible();
+  await expect(page.locator('.start-button')).toBeEnabled();
+});
+
+test('audit cancellation failure retains active progress and cancellation control', async ({ page }) => {
+  await openDesktop(page, { direct: true, holdAudit: true, cancelAuditFailure: true }); const dialog = await auditDialog(page);
+  await dialog.locator('[data-action="cancel-audit"]').click();
+  await expect(dialog.getByRole('alert')).toHaveText(dictionaries['zh-TW']['error.CACHE_AUDIT_FAILED']);
+  await expect(dialog.getByRole('status')).toContainText('正在檢查快取');
+  await expect(dialog.locator('[data-action="cancel-audit"]')).toBeEnabled(); await expect(page.locator('.start-button')).toBeDisabled();
+});
+
+test('audit failures remain visible alongside checked and repaired counts', async ({ page }) => {
+  await openDesktop(page, { direct: true, auditFailures: 3 }); const dialog = await auditDialog(page);
+  await expect(dialog.getByRole('status')).toContainText('檢查完成，部分項目處理失敗');
+  await expect(dialog.getByRole('status')).toContainText('已檢查 8 · 已修復 2 · 失敗 3');
+  await expect(dialog.locator('[data-action="close-audit"]')).toBeEnabled();
+});
+
+test('audit visibility pause preserves URL drafts and accepts completion after resume', async ({ page }) => {
+  await openDesktop(page, { holdAudit: true }); await page.getByLabel('代理 URL').fill('http://draft@localhost:8855');
+  const dialog = await auditDialog(page); await expect(dialog.getByRole('status')).toContainText('正在檢查快取');
+  await page.evaluate(() => (window as any).__emitVisibility(false));
+  const count = (await commands(page)).filter(c => c.command === 'get_status').length;
+  await page.evaluate(() => (window as any).__finishAudit()); await page.waitForTimeout(1100);
+  expect((await commands(page)).filter(c => c.command === 'get_status')).toHaveLength(count);
+  await page.evaluate(() => (window as any).__emitVisibility(true));
+  await expect(dialog.getByRole('status')).toContainText('檢查完成');
+  await dialog.locator('[data-action="close-audit"]').click();
+  await expect(page.getByLabel('代理 URL')).toHaveValue('http://draft@localhost:8855');
+});
+
+for (const language of ['zh-CN', 'zh-TW'] as const) test(`${language} audit dialog fits a constrained work area`, async ({ page }) => {
+  await openDesktop(page, { direct: true }); await page.setViewportSize({ width: 380, height: 300 }); await menu(page);
+  await page.getByRole('menuitemradio', { name: language === 'zh-CN' ? '简体' : '繁體', exact: true }).click(); await page.keyboard.press('Escape');
+  const dialog = await auditDialog(page); const t = dictionaries[language];
+  await expect(dialog.getByRole('status')).toContainText(t.auditDone);
+  await expect(dialog.getByRole('status')).toContainText(language === 'zh-TW' ? '已檢查 8 · 已修復 2 · 失敗 0' : '已检查 8 · 已修复 2 · 失败 0');
+  const box = await dialog.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(380); expect(box!.y + box!.height).toBeLessThanOrEqual(300);
+  const button = await dialog.locator('[data-action="close-audit"]').boundingBox(); expect(button!.y + button!.height).toBeLessThanOrEqual(300);
 });

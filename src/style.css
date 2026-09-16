@@ -136,3 +136,13 @@ html, body, #root { height:100%; overflow:hidden; }
 .statusbar { height:54px; min-height:54px; padding:4px 16px 10px; align-items:flex-end; }
 .statusbar span:first-child { flex:1; min-width:0; max-width:none; line-height:20px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 .statusbar span:last-child { flex:0 0 auto; }
+
+/* Cache inspection is modal while maintenance owns the cache. */
+dialog { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 7px; width: min(550px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overflow-wrap: anywhere; padding: 18px; box-shadow: 0 18px 80px #0005; }
+dialog::backdrop { background: var(--overlay); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 17px; }
+.dialog-heading h2 { font-size: 15px; }
+.dialog-heading button { font-size: 14px; }
+dialog p { font-size: 14px; color: var(--muted); line-height: 1.8; margin-bottom: 14px; }
+.dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.dialog-heading svg { display:block; }

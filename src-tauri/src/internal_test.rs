@@ -97,6 +97,34 @@ pub async fn internal_test_control(
                 )
                 .map_err(|e| e.to_string())?;
         }
+        "audit-hold" | "audit-release" | "audit-fixture" => {
+            let core = app.state::<std::sync::Arc<gbf_core::runtime::Runtime>>();
+            let marker = core.root.join(".internal-audit-hold");
+            match action.as_str() {
+                "audit-hold" => std::fs::write(marker, b"held").map_err(|e| e.to_string())?,
+                "audit-release" => match std::fs::remove_file(marker) {
+                    Ok(()) => (),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                    Err(error) => return Err(error.to_string()),
+                },
+                _ => {
+                    let state = core.control_state();
+                    if state.running || state.maintenance {
+                        return Err("Fixture creation requires an idle cache".into());
+                    }
+                    let cache = core.root.join("cache/ja");
+                    std::fs::write(cache.join(format!("{}.body", "0".repeat(64))), b"orphan")
+                        .map_err(|e| e.to_string())?;
+                    std::fs::write(
+                        cache.join(format!("{}.pending", "1".repeat(64))),
+                        b"partial",
+                    )
+                    .map_err(|e| e.to_string())?;
+                    std::fs::write(cache.join("audit-notes.txt"), b"keep")
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        }
         "snapshot" => {}
         _ => return Err("Unknown test action".into()),
     }
@@ -110,6 +138,11 @@ pub async fn internal_test_control(
         .snapshot()
         .map_err(|e| e.to_string())?
         .enabled();
+    let root = app
+        .state::<std::sync::Arc<gbf_core::runtime::Runtime>>()
+        .root
+        .clone();
+    let cache = root.join("cache/ja");
     Ok(serde_json::json!({
         "statusReads": STATUS_READS.load(Ordering::Relaxed),
         "innerSize": window.inner_size().ok(),
@@ -117,6 +150,11 @@ pub async fn internal_test_control(
         "scaleFactor": window.scale_factor().ok(),
         "visible": window.is_visible().map_err(|e| e.to_string())?,
         "autostart": autostart,
+        "auditFixture": {
+            "orphanExists": cache.join(format!("{}.body", "0".repeat(64))).exists(),
+            "pendingExists": cache.join(format!("{}.pending", "1".repeat(64))).exists(),
+            "notesPreserved": std::fs::read(cache.join("audit-notes.txt")).is_ok_and(|data| data == b"keep"),
+        },
         "fixture": std::env::var("GBF_INTERNAL_TEST_DATA").ok().and_then(|p| std::fs::read(PathBuf::from(p).join("fixture.json")).ok()).and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()),
     }))
 }

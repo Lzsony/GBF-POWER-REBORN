@@ -75,7 +75,27 @@ try {
 
   expect(initial.running).toBe(false); expect(initial.settings.mode).toBe('direct');
   await expect(page.locator('.mode-field option[value="accelerate"]')).toBeDisabled();
-  if (index > 0) expect(initial.preferences.language).toBe('zh-TW');
+  if (index > 0) {
+    expect(initial.preferences.language).toBe('zh-TW');
+    expect(initial.cachePreferences).toEqual({prefetchEnabled:false, warmupEnabled:false});
+  }
+  await invoke('save_cache_preferences', {patch:{prefetchEnabled:false}});
+  await invoke('save_cache_preferences', {patch:{warmupEnabled:false}});
+  expect((await invoke('get_status')).cachePreferences).toEqual({prefetchEnabled:false, warmupEnabled:false});
+  const control = action => invoke('internal_test_control', {action});
+  await control('audit-fixture');
+  await invoke('start_cache_audit');
+  await expect.poll(async () => (await invoke('get_status')).audit).toMatchObject({running:false,repaired:2,failed:0});
+  expect((await control('snapshot')).auditFixture).toEqual({orphanExists:false,pendingExists:false,notesPreserved:true});
+  await control('audit-hold');
+  await invoke('start_cache_audit');
+  expect((await invoke('get_native_control')).state.maintenance).toBe(true);
+  const blocked = await invoke('clear_cache').then(() => null, error => error.code);
+  expect(blocked).toBe('CACHE_MAINTENANCE_BUSY');
+  await invoke('cancel_cache_audit');
+  await control('audit-release');
+  expect((await invoke('get_status')).audit).toMatchObject({running:false,cancelled:true});
+  expect((await invoke('get_native_control')).state.maintenance).toBe(false);
   if (isolated) {
     if (index === 0) {
       const {hasAuthentication, ...settings} = initial.settings;
@@ -126,10 +146,11 @@ try {
   const config = JSON.parse(await readFile(path.join(data, 'config.json'), 'utf8'));
   expect(config.schemaVersion).toBe(1);
   expect(config.settings.preferences.language).toBe('zh-TW');
+  expect(config.settings.cachePreferences).toEqual({prefetchEnabled:false,warmupEnabled:false});
   expect(errors).toHaveLength(0);
   console.log(JSON.stringify({result:'PASS',package:manifest.package,dataDirectory:data,runtime:version.product,runtimeExecutable:runtimeExe,
     checks:['runtime selection overrides stale environment','current data root and WebView data','cross-package single instance preserves running proxy','relaunch preserves settings: '+(index>0),'quoted autostart tracks moved executable: '+isolated,'Chinese and spaced executable path','different working directory',
-      'real WebView2 UI and IPC','preference save','proxy start/PAC/stop/port release','no horizontal overflow','no page errors']},null,2));
+      'real WebView2 UI and IPC','cache preference persistence','audit repair/cancel/maintenance unlock','preference save','proxy start/PAC/stop/port release','no horizontal overflow','no page errors']},null,2));
   await invoke('quit_app').catch(() => {});
   await Promise.race([ended,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Product did not quit')),10000))]);
 } finally {

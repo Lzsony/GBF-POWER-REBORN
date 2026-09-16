@@ -1,3 +1,4 @@
+mod background;
 pub mod cache;
 pub mod certificate;
 pub mod config;

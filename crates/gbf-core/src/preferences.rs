@@ -1,5 +1,26 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct CachePreferences {
+    pub prefetch_enabled: bool,
+    pub warmup_enabled: bool,
+}
+impl Default for CachePreferences {
+    fn default() -> Self {
+        Self {
+            prefetch_enabled: true,
+            warmup_enabled: true,
+        }
+    }
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CachePreferencePatch {
+    pub prefetch_enabled: Option<bool>,
+    pub warmup_enabled: Option<bool>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {

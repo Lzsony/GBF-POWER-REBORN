@@ -12,6 +12,9 @@ use std::{
 pub struct Metrics {
     pub requests: AtomicU64,
     pub downloads: AtomicU64,
+    pub prefetched: AtomicU64,
+    pub foreground: AtomicU64,
+    tunnel_activity: Mutex<Option<tokio::time::Instant>>,
     pub eligible: AtomicU64,
     pub hits: AtomicU64,
     pub connections: AtomicU64,
@@ -174,6 +177,7 @@ pub struct NetworkSnapshot {
 pub struct Snapshot {
     pub requests: u64,
     pub downloads: u64,
+    pub prefetched: u64,
     pub hit_rate: Option<f64>,
     pub received: u64,
     pub sent: u64,
@@ -197,6 +201,21 @@ impl Metrics {
             1 => &mut network.game,
             _ => &mut network.steam,
         } = QualityWindow::default();
+    }
+    pub fn tunnel_activity(&self) {
+        *self.tunnel_activity.lock().unwrap() = Some(tokio::time::Instant::now());
+    }
+    pub fn foreground_busy(&self) -> bool {
+        self.foreground.load(Ordering::Relaxed) > 0
+            || self
+                .tunnel_activity
+                .lock()
+                .unwrap()
+                .is_some_and(|t| t.elapsed().as_millis() < 500)
+    }
+    pub fn foreground(self: &Arc<Self>) -> ForegroundGuard {
+        self.foreground.fetch_add(1, Ordering::Relaxed);
+        ForegroundGuard(self.clone())
     }
     pub fn record_network_sample(
         &self,
@@ -251,6 +270,7 @@ impl Metrics {
         Snapshot {
             requests: n(&self.requests),
             downloads: n(&self.downloads),
+            prefetched: n(&self.prefetched),
             hit_rate: (n(&self.eligible) > 0)
                 .then(|| n(&self.hits) as f64 * 100.0 / n(&self.eligible) as f64),
             received: n(&self.received),
@@ -266,6 +286,13 @@ impl Metrics {
 }
 
 pub struct ConnectionGuard(Arc<Metrics>);
+pub struct ForegroundGuard(Arc<Metrics>);
+impl Drop for ForegroundGuard {
+    fn drop(&mut self) {
+        self.0.tunnel_activity();
+        self.0.foreground.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         self.0.connections.fetch_sub(1, Ordering::Relaxed);
@@ -298,6 +325,23 @@ mod tests {
         assert_eq!(window.snapshot().2, Some(0.0));
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn cooldown_tracks_foreground_completion_and_api_activity() {
+        let metrics = Arc::new(Metrics::default());
+        assert!(!metrics.foreground_busy());
+        let guard = metrics.foreground();
+        tokio::time::advance(std::time::Duration::from_secs(2)).await;
+        assert!(metrics.foreground_busy());
+        drop(guard);
+        tokio::time::advance(std::time::Duration::from_millis(499)).await;
+        assert!(metrics.foreground_busy());
+        tokio::time::advance(std::time::Duration::from_millis(1)).await;
+        assert!(!metrics.foreground_busy());
+        metrics.tunnel_activity();
+        assert!(metrics.foreground_busy());
+        tokio::time::advance(std::time::Duration::from_millis(500)).await;
+        assert!(!metrics.foreground_busy());
+    }
     #[test]
     fn distributions_ignore_failed_samples_and_reset_only_route() {
         let mut w = QualityWindow::default();

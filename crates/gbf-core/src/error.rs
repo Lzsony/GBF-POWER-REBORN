@@ -21,6 +21,8 @@ pub enum ErrorCode {
     SwitchFailedRestored,
     SwitchRestoreFailed,
     BrowserOpenFailed,
+    CacheMaintenanceBusy,
+    CacheAuditFailed,
     CertificateRequired,
     SecretReadFailed,
     SecretWriteFailed,

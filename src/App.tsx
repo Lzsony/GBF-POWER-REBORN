@@ -7,7 +7,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import SettingsMenu, { type MenuAction } from './SettingsMenu';
 import { useProxyUrl } from './useProxyUrl';
 import appLogo from '../src-tauri/icons/icon.png';
-import { initialSettings, initialStatus, type Settings, type Status, type Preferences } from './types';
+import { initialSettings, initialStatus, type Settings, type Status, type Preferences, type CachePreferences } from './types';
 import { errorMessage, languageFromSystem, translate, type Message, type MessageKey } from './i18n';
 
 const native = isTauri();
@@ -26,6 +26,13 @@ export default function App() {
   const [notice, setNotice] = useState<Message>({ key: native ? 'loading' : 'preview' });
   const [error, setError] = useState<MessageKey | null>(null);
   const [flash, setFlash] = useState<Message | null>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const cacheSaving = useRef(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditPending, setAuditPending] = useState<'start' | 'cancel' | null>(null);
+  const [auditError, setAuditError] = useState<MessageKey | null>(null);
+  const auditAction = useRef(false);
+  const auditDialog = useRef<HTMLDialogElement>(null);
   const appliedSettings = useRef(initialSettings);
   const taskRunning = useRef(false);
   const [rates, setRates] = useState<{down:number|null;up:number|null}>({ down: null, up: null });
@@ -47,7 +54,7 @@ export default function App() {
   const proxyTestId=useRef<string|null>(null);
   const quitting=useRef(false);
   const [isQuitting,setIsQuitting]=useState(false);
-  const locked = coreBusy || !!busy || !ready || isQuitting;
+  const locked = status.audit.running || auditPending !== null || cacheBusy || coreBusy || !!busy || !ready || isQuitting;
   const backendDisabled = !native || locked;
   const proxyActionBusy=proxyTest==='testing'||proxyTest==='saving';
   const testPending=proxyActionBusy;
@@ -137,6 +144,45 @@ export default function App() {
   }, [acceptStatus]);
   useEffect(() => { if (!flash) return; const timer = setTimeout(() => setFlash(null), 2200); return () => clearTimeout(timer); }, [flash]);
 
+  useEffect(() => {
+    const dialog = auditDialog.current;
+    if (auditOpen) dialog?.showModal(); else dialog?.close();
+  }, [auditOpen]);
+
+  async function changeCachePreferences(patch: Partial<CachePreferences>) {
+    if (!native || cacheSaving.current || locked || proxyActionBusy) return;
+    cacheSaving.current = true; setCacheBusy(true); setError(null);
+    try {
+      const cachePreferences = await invoke<CachePreferences>('save_cache_preferences', { patch });
+      setStatus(previous => ({ ...previous, cachePreferences }));
+    } catch (e) {
+      setError(errorMessage(e));
+      await refresh().catch(() => undefined);
+    } finally { cacheSaving.current = false; setCacheBusy(false); }
+  }
+  function closeAudit() {
+    if (!status.audit.running && !auditPending) setAuditOpen(false);
+  }
+  async function auditOperation(action: 'start' | 'cancel') {
+    if (auditAction.current || quitting.current || !native) return;
+    if (action === 'start' && (locked || saving.current || taskRunning.current || status.running || proxyActionBusy)) return;
+    auditAction.current = true; setAuditPending(action); setAuditError(null); setError(null);
+    if (action === 'start') {
+      setAuditOpen(true);
+      setStatus(previous => ({ ...previous, audit: { running: true, cancelled: false, checked: 0, repaired: 0, failed: 0 } }));
+    }
+    let accepted = false;
+    try {
+      await invoke(action === 'start' ? 'start_cache_audit' : 'cancel_cache_audit');
+      accepted = true;
+      await refresh();
+    } catch (e) {
+      const key = errorMessage(e); setAuditError(key); setError(key);
+      if (action === 'start' && !accepted) setStatus(previous => ({ ...previous, audit: { ...previous.audit, running: false } }));
+      await refresh().catch(() => undefined);
+    } finally { auditAction.current = false; setAuditPending(null); }
+  }
+
   async function saveNow(patch:Partial<Settings>, url:string|null=null):Promise<boolean> {
     if(saving.current || quitting.current)return false;
     if(!native){setSettings(previous=>({...previous,...patch}));return true;}
@@ -207,6 +253,7 @@ export default function App() {
     finally { setPreferencesBusy(false); }
   }
   function menuAction(action: MenuAction) {
+    if (action === 'audit') { void auditOperation('start'); return; }
     if (action === 'clear') { void task('clearCache', async()=>{await invoke('clear_cache');setNotice({key:'cacheCleared'});});return; }
     if (action === 'quit') { exitNow(); return; }
     if (action === 'data' || action === 'openCertificate') {
@@ -224,7 +271,7 @@ export default function App() {
     <div className="content">
       <section className="running-row" aria-label="GBF POWER REBORN">
         <div className="brand"><img src={appLogo} alt=""/><strong>GBF POWER REBORN</strong></div>
-        <SettingsMenu quitting={isQuitting} cacheUsage={size(status.cacheBytes)} onCacheLimit={value => setSettings(s=>({...s,cacheLimitGb:value}))} onCommitCacheLimit={()=>void commitNumber('cacheLimitGb')} t={t} preferences={preferences} certificate={status.certificate} settings={settings} running={status.running} busy={locked} preferencesBusy={preferencesBusy} ready={ready} native={native} onPreference={changePreferences} onListenPort={value => setSettings(s=>({...s,listenPort:value}))} onCommitListenPort={()=>void commitNumber('listenPort')} onCopyPac={() => void task('copyPac', async () => { await writeText(status.pacUrl); setNotice({ key: 'copied' }); setFlash({ key: 'copied' }); })} onAction={menuAction}/>
+        <SettingsMenu cachePreferences={status.cachePreferences} cacheBusy={cacheBusy} auditRunning={status.audit.running} onCachePreference={changeCachePreferences} quitting={isQuitting} cacheUsage={size(status.cacheBytes)} onCacheLimit={value => setSettings(s=>({...s,cacheLimitGb:value}))} onCommitCacheLimit={()=>void commitNumber('cacheLimitGb')} t={t} preferences={preferences} certificate={status.certificate} settings={settings} running={status.running} busy={locked || proxyActionBusy} preferencesBusy={preferencesBusy} ready={ready} native={native} onPreference={changePreferences} onListenPort={value => setSettings(s=>({...s,listenPort:value}))} onCommitListenPort={()=>void commitNumber('listenPort')} onCopyPac={() => void task('copyPac', async () => { await writeText(status.pacUrl); setNotice({ key: 'copied' }); setFlash({ key: 'copied' }); })} onAction={menuAction}/>
       </section>
 
       <section className="connection-section">
@@ -270,6 +317,12 @@ export default function App() {
       </section>
     </div>
       <footer className="statusbar"><span role="status" className={error ? 'error' : ''}>{error ? t(error) : isQuitting ? t('quitting') : busy ? progressStatus : testNotice ? t(testNotice.key,testNotice.args) : (flash ? t(flash.key,flash.args) : connectionStatus)}</span><span>v{version}</span></footer>
+    <dialog ref={auditDialog} className="audit-dialog" aria-label={t('auditTitle')} onCancel={event => { event.preventDefault(); closeAudit(); }}>
+      <div className="dialog-heading"><h2>{t('auditTitle')}</h2><button type="button" className="text-button" aria-label={t('closeDialog')} disabled={status.audit.running || auditPending !== null} onClick={closeAudit}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="2"/></svg></button></div>
+      <p role="status">{t(auditPending === 'start' ? 'auditStarting' : auditPending === 'cancel' ? 'auditCancelling' : status.audit.running ? 'auditRunning' : status.audit.cancelled ? 'auditCancelled' : auditError ? 'auditFailed' : status.audit.failed > 0 ? 'auditIssues' : 'auditDone')}<br/>{t('auditCounts', { checked: number(status.audit.checked), repaired: number(status.audit.repaired), failed: number(status.audit.failed) })}</p>
+      {auditError && <p role="alert" className="error">{t(auditError)}</p>}
+      <div className="dialog-actions"><button type="button" data-action={status.audit.running || auditPending !== null ? "cancel-audit" : "close-audit"} disabled={auditPending !== null || isQuitting} onClick={() => { if (status.audit.running) void auditOperation('cancel'); else closeAudit(); }}>{t(status.audit.running || auditPending !== null ? 'cancel' : 'closeDialog')}</button></div>
+    </dialog>
   </main>;
 }
 function Metric({ label, value, className = '' }: { label: string; value: string; className?: string }) {

@@ -1,5 +1,8 @@
 // Injected only by the internal-test binary into its real WKWebView.
 (() => {
+  const bootErrors = [];
+  window.addEventListener('error', event => bootErrors.push(event.message || 'resource-load-failed'), true);
+  window.addEventListener('unhandledrejection', event => bootErrors.push(String(event.reason)));
   const run = async () => {
     const invoke = (command, args = {}) => window.__TAURI_INTERNALS__.invoke(command, args);
     const control = (action, result) => invoke('internal_test_control', { action, result });
@@ -8,7 +11,7 @@
     const until = async (predicate, label, timeout = 10000) => {
       const end = Date.now() + timeout;
       while (Date.now() < end) { if (await predicate()) return; await sleep(50); }
-      throw new Error(`Timeout: ${label}; status=${document.querySelector('.statusbar')?.textContent}`);
+      throw new Error(`Timeout: ${label}; status=${document.querySelector('.statusbar')?.textContent}; errors=${JSON.stringify(bootErrors)}`);
     };
     const checks = [];
     try {
@@ -20,7 +23,8 @@
         if (fixture?.stage === 'restart') {
           check(initial.preferences.language === 'zh-TW' && initial.preferences.theme === 'auto', 'preferences not persisted');
           check(initial.settings.listenPort === fixture.port, 'port not persisted');
-          checks.push('schema1-restart-persistence');
+          check(initial.cachePreferences.prefetchEnabled === false && initial.cachePreferences.warmupEnabled === false, 'cache preferences not persisted');
+          checks.push('schema1-restart-persistence', 'cache-preferences-restart-persistence');
         }
         document.querySelector('.menu-trigger').click();
         await until(() => document.querySelector('.language-options'), 'menu');
@@ -83,6 +87,71 @@
         await until(()=>!document.querySelector('.line-field')&&!document.querySelector('.host-field'),'restore direct');layout();
         checks.push('400x520-available-modes-no-scroll', 'acceleration-disabled', 'port-only-test-then-explicit-save', 'footer-version-visible');
 
+        await until(() => !document.querySelector('.start-button').disabled, 'direct settings settled');
+        const openCache = async () => {
+          if (document.querySelector('.menu-trigger').getAttribute('aria-expanded') !== 'true') document.querySelector('.menu-trigger').click();
+          await until(() => document.querySelector('[aria-controls="cache-menu"]'), 'cache menu trigger');
+          document.querySelector('[aria-controls="cache-menu"]').click();
+          await until(() => document.querySelector('#cache-menu'), 'cache menu');
+        };
+        await openCache();
+        const beforeCachePreferences = (await invoke('get_status')).settings;
+        for (const [key, label] of [['prefetchEnabled', '素材預取'], ['warmupEnabled', '記憶體預熱']]) {
+          for (const enabled of [true, false]) {
+            await until(() => {
+              const input = document.querySelector(`#cache-menu input[aria-label="${label}"]`);
+              return input && !input.disabled && input.getAttribute('aria-disabled') !== 'true';
+            }, `${key} available`);
+            const input = document.querySelector(`#cache-menu input[aria-label="${label}"]`);
+            if (input.checked !== enabled) input.click();
+            await until(async () => (await invoke('get_status')).cachePreferences[key] === enabled, `${key} persisted`);
+            await until(() => input.checked === enabled && input.getAttribute('aria-disabled') !== 'true', `${key} reflected`);
+          }
+        }
+        check(JSON.stringify((await invoke('get_status')).settings) === JSON.stringify(beforeCachePreferences), 'cache patch changed connection settings');
+        document.querySelector('.menu-trigger').click();
+        checks.push('cache-preferences-toggle-and-isolated-patch');
+
+        await control('audit-fixture');
+        await openCache();
+        document.querySelector('[data-action="audit"]').click();
+        await until(() => document.querySelector('dialog[open]'), 'audit dialog');
+        await until(async () => {
+          const audit = (await invoke('get_status')).audit;
+          return !audit.running && audit.repaired === 2 && audit.failed === 0;
+        }, 'real audit repaired orphan and incomplete files');
+        await until(() => document.querySelector('dialog[open] [role="status"]')?.textContent.includes('檢查完成'), 'audit completion visible');
+        const repaired = (await control('snapshot')).auditFixture;
+        check(!repaired.orphanExists && !repaired.pendingExists && repaired.notesPreserved, 'audit repaired wrong files');
+        document.querySelector('[data-action="close-audit"]').click();
+        await until(() => !document.querySelector('dialog[open]'), 'completed audit closed');
+        checks.push('native-audit-completion-repairs-owned-files-preserves-notes');
+
+        await control('audit-hold');
+        await openCache();
+        document.querySelector('[data-action="audit"]').click();
+        await until(async () => (await invoke('get_status')).audit.running, 'audit running');
+        await until(() => document.querySelector('.start-button').disabled && document.querySelector('.mode-field select').disabled, 'audit locks foreground controls');
+        check((await invoke('get_native_control')).state.maintenance, 'native maintenance state missing');
+        for (const command of ['start_proxy', 'clear_cache', 'start_cache_audit']) {
+          let failure;
+          try { await invoke(command); } catch (error) { failure = error; }
+          check(failure?.code === 'CACHE_MAINTENANCE_BUSY', `${command} was not blocked during audit: ${JSON.stringify(failure)}`);
+        }
+        const cancel = document.querySelector('[data-action="cancel-audit"]');
+        check(cancel && !cancel.disabled, 'audit cancellation is disabled by maintenance');
+        cancel.click();
+        await until(async () => {
+          const audit = (await invoke('get_status')).audit;
+          return !audit.running && audit.cancelled;
+        }, 'audit cancellation finished');
+        await control('audit-release');
+        await until(() => document.querySelector('dialog[open] [role="status"]')?.textContent.includes('檢查已取消'), 'cancelled audit visible');
+        check(!(await invoke('get_native_control')).state.maintenance, 'native maintenance not released');
+        document.querySelector('[data-action="close-audit"]').click();
+        await until(() => !document.querySelector('dialog[open]') && !document.querySelector('.start-button').disabled, 'audit lock released');
+        checks.push('native-audit-cancel-remains-actionable', 'audit-maintenance-blocks-start-clear-reentry');
+
         await control('autostart-on');
         check((await control('snapshot')).autostart, 'autostart registration missing');
         await control('autostart-off');
@@ -102,6 +171,10 @@
         await control('show');
         await until(async () => (await control('snapshot')).statusReads > before, 'poll resumes');
         checks.push('hidden-polling-suspended', 'hidden-tray-start-stop', 'pac-http', 'visible-polling-resumes');
+      await control('audit-hold');
+      await invoke('start_cache_audit');
+      await until(async () => (await invoke('get_native_control')).state.maintenance, 'audit held before exit');
+      checks.push('quit-during-audit');
       await control('report', { passed: true, checks, userAgent: navigator.userAgent });
       await sleep(300);
       document.querySelector('.menu-trigger').click();
@@ -109,7 +182,9 @@
       document.querySelector('[data-action="quit"]').click();
       check(!document.querySelector('dialog[open]'),'quit confirmation appeared');
     } catch (error) {
-      await control('report', { passed: false, checks, error: String(error) });
+      await control('report', { passed: false, checks, error: String(error), boot: {url: location.href, ready: document.readyState, pageText: document.body?.textContent.slice(0, 300), rootLength: document.querySelector('#root')?.innerHTML.length, scripts: Array.from(document.scripts).map(s=>s.src), resources: performance.getEntriesByType('resource').map(r=>r.name)}, statusKeys: Object.keys(await invoke('get_status').catch(()=>({}))) });
+      await control('audit-release').catch(() => {});
+      await invoke('cancel_cache_audit').catch(() => {});
       await invoke('stop_proxy').catch(() => {});
       await control('autostart-off').catch(() => {});
       await invoke('quit_app').catch(() => {});

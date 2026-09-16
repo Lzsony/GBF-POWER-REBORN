@@ -61,6 +61,21 @@ fn acknowledge_native_notice(app: tauri::AppHandle, id: u64) {
     tray_control::acknowledge(&app, id);
 }
 #[tauri::command]
+async fn save_cache_preferences(
+    core: Core<'_>,
+    patch: gbf_core::preferences::CachePreferencePatch,
+) -> CommandResult<gbf_core::preferences::CachePreferences> {
+    core.save_cache_preferences(patch).await.map_err(error)
+}
+#[tauri::command]
+async fn start_cache_audit(core: Core<'_>) -> CommandResult<()> {
+    core.start_audit().await.map_err(error)
+}
+#[tauri::command]
+async fn cancel_cache_audit(core: Core<'_>) -> CommandResult<()> {
+    core.cancel_audit().await.map_err(error)
+}
+#[tauri::command]
 async fn start_proxy(core: Core<'_>) -> CommandResult<()> {
     core.start().await.map_err(error)
 }
@@ -281,6 +296,9 @@ fn main() {
             get_status,
             get_native_control,
             acknowledge_native_notice,
+            save_cache_preferences,
+            start_cache_audit,
+            cancel_cache_audit,
             lifecycle::main_window_visible,
             start_proxy,
             stop_proxy,

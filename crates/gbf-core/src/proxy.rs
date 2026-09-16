@@ -89,6 +89,9 @@ pub struct ContextState {
     certs: Mutex<HashMap<String, Arc<rustls::ServerConfig>>>,
     pub(crate) fetch_slots: Arc<Semaphore>,
     write_gate: Arc<AsyncMutex<()>>,
+    #[cfg(test)]
+    pub(crate) prefetch_waiting: tokio::sync::Notify,
+    pub(crate) background: tokio::sync::Mutex<crate::background::Background>,
 }
 impl ContextState {
     pub fn new(
@@ -112,6 +115,9 @@ impl ContextState {
             certs: Mutex::new(HashMap::new()),
             fetch_slots: Arc::new(Semaphore::new(16)),
             write_gate: Arc::new(AsyncMutex::new(())),
+            #[cfg(test)]
+            prefetch_waiting: tokio::sync::Notify::new(),
+            background: tokio::sync::Mutex::new(Default::default()),
         })
     }
     pub(crate) fn key_lock(&self, key: &CacheKey) -> Arc<AsyncMutex<()>> {
@@ -380,6 +386,7 @@ async fn process(
         if let Some(entry) = state.cache.get_ram(key.as_ref().expect("cache candidate")) {
             if let Some(response) = cache::fresh(&entry, &policy_request) {
                 state.metrics.hits.fetch_add(1, Ordering::Relaxed);
+                state.discover(&uri, &response.headers, &entry.body);
                 return Ok(Response::from_parts(response, body(entry.body)));
             }
         }
@@ -408,6 +415,7 @@ async fn process(
             {
                 BeforeRequest::Fresh(response) => {
                     state.metrics.hits.fetch_add(1, Ordering::Relaxed);
+                    state.discover(&uri, &response.headers, &entry.body);
                     return Ok(Response::from_parts(response, body(entry.body.clone())));
                 }
                 BeforeRequest::Stale { request, matches } => {
@@ -421,6 +429,7 @@ async fn process(
             }
         }
     }
+    let _foreground = candidate.then(|| state.metrics.foreground());
     let _fetch_slot = if candidate {
         Some(state.fetch_slots.clone().acquire_owned().await?)
     } else {
@@ -446,7 +455,7 @@ async fn process(
         bytes
     });
     let mut first_body = Some(reqwest::Body::wrap_stream(stream));
-    let guards = Arc::new((_fetch_slot, _lock));
+    let guards = Arc::new((_foreground, _fetch_slot, _lock));
     let mut deadline = None;
     loop {
         let request_body = first_body.take().unwrap_or_else(|| {
@@ -511,6 +520,7 @@ async fn process(
                             let c = state.cache.clone();
                             let _ = tokio::task::spawn_blocking(move || c.remove(&k)).await;
                         }
+                        state.discover(&uri, &parts.headers, &entry.body);
                         let mut response = Response::from_parts(parts, body(entry.body));
                         for value in response_headers.get_all(header::SET_COOKIE) {
                             response
@@ -581,6 +591,7 @@ async fn process(
                         })
                         .await?
                         {
+                            state.discover(&uri, &response_headers, &bytes);
                             let k = key.clone().expect("cache candidate");
                             let entry = Cached {
                                 policy,
@@ -1019,7 +1030,7 @@ pub(crate) mod tests {
                                 assert!(!req.headers().contains_key("authorization"));
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
-                            if req.uri().path().contains("/slow-response/") {
+                            if req.uri().path().contains("/slow-prefetch/") {
                                 tokio::time::sleep(Duration::from_secs(1)).await;
                             }
                             let mut res = Response::builder().header("etag", "\"version-1\"");

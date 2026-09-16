@@ -67,7 +67,7 @@ impl Runtime {
             return failure;
         }
         let operation = self.operations.lock().await;
-        if self.control_state().shutting_down {
+        if self.control_state().shutting_down || self.ensure_no_audit().is_err() {
             return failure;
         }
         let mut slot = self.proxy_test.lock().await;

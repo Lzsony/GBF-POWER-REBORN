@@ -309,6 +309,124 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn audit_cancellation_releases_maintenance_and_shutdown_closes_admission() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = Arc::new(Runtime::new(dir.path().into()).unwrap());
+        let cache = core.cache.clone();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let held = tokio::task::spawn_blocking(move || cache.hold_disk(entered_tx, release_rx));
+        tokio::task::spawn_blocking(move || entered_rx.recv().unwrap())
+            .await
+            .unwrap();
+        core.start_audit().await.unwrap();
+        assert!(core.control_state().maintenance);
+        assert!(core.audit.progress.lock().unwrap().running);
+        assert_eq!(
+            core.start().await.unwrap_err().downcast_ref::<ErrorCode>(),
+            Some(&ErrorCode::CacheMaintenanceBusy)
+        );
+        assert!(core.save(Settings::default(), None).await.is_err());
+        assert!(core.clear_cache().await.is_err());
+        let cancelled = tokio::spawn({
+            let core = core.clone();
+            async move { core.cancel_audit().await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !core.audit.cancel.load(Ordering::Relaxed) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        release_tx.send(()).unwrap();
+        held.await.unwrap();
+        cancelled.await.unwrap().unwrap();
+        let status = core.status().await.unwrap();
+        assert!(!status.audit.running);
+        assert!(status.audit.cancelled);
+        assert!(!core.control_state().maintenance);
+        core.clear_cache().await.unwrap();
+        core.shutdown().await.unwrap();
+        assert!(core.start_audit().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn cache_preference_changes_preserve_live_route_counters_and_other_preferences() {
+        use crate::preferences::CachePreferencePatch;
+        let (_dir, core, server, _) = switching_fixture().await;
+        core.start().await.unwrap();
+        let started = *core.started.read().unwrap();
+        let metrics = core.metrics.read().unwrap().clone();
+        metrics.requests.store(7, Ordering::Relaxed);
+        let background = crate::preferences::CachePreferences {
+            prefetch_enabled: false,
+            warmup_enabled: false,
+        };
+        let saved = core
+            .save_cache_preferences(CachePreferencePatch {
+                prefetch_enabled: Some(false),
+                warmup_enabled: Some(false),
+            })
+            .await
+            .unwrap();
+        assert_eq!(saved, background);
+        assert_eq!(*core.started.read().unwrap(), started);
+        assert!(Arc::ptr_eq(&metrics, &core.metrics.read().unwrap()));
+        assert_eq!(metrics.requests.load(Ordering::Relaxed), 7);
+        assert_eq!(core.status().await.unwrap().cache_preferences, background);
+        assert!(core.status().await.unwrap().running);
+        assert_eq!(
+            Settings::load(&core.root).unwrap().cache_preferences,
+            background
+        );
+        core.stop().await.unwrap();
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn cache_preferences_merge_without_overwriting_other_settings_and_audit_blocks_mutations()
+    {
+        use crate::preferences::CachePreferencePatch;
+        let dir = tempfile::tempdir().unwrap();
+        crate::config_store::update(dir.path(), |d| d.settings.listen_port = 8125).unwrap();
+        let core = Runtime::new(dir.path().into()).unwrap();
+        assert!(
+            core.status()
+                .await
+                .unwrap()
+                .cache_preferences
+                .prefetch_enabled
+        );
+        let mut draft = core.settings.read().unwrap().clone();
+        draft.listen_port = 8126;
+        core.save_cache_preferences(CachePreferencePatch {
+            prefetch_enabled: Some(false),
+            warmup_enabled: None,
+        })
+        .await
+        .unwrap();
+        core.save(draft, None).await.unwrap();
+        let saved = Settings::load(dir.path()).unwrap();
+        assert_eq!(saved.listen_port, 8126);
+        assert!(!saved.cache_preferences.prefetch_enabled);
+        assert!(saved.cache_preferences.warmup_enabled);
+        core.audit.progress.lock().unwrap().running = true;
+        assert!(core
+            .start()
+            .await
+            .unwrap_err()
+            .downcast_ref::<ErrorCode>()
+            .is_some_and(|e| *e == ErrorCode::CacheMaintenanceBusy));
+        assert!(core.clear_cache().await.is_err());
+        assert!(core.start_audit().await.is_err());
+        core.audit.progress.lock().unwrap().running = false;
+        core.start_audit().await.unwrap();
+        core.cancel_audit().await.unwrap();
+        assert!(!core.status().await.unwrap().audit.running);
+        core.clear_cache().await.unwrap();
+    }
+    #[tokio::test]
     async fn preferences_do_not_overwrite_connection_drafts_or_stop_active_core() {
         let dir = tempfile::tempdir().unwrap();
         let core = Runtime::new(dir.path().to_path_buf()).unwrap();
@@ -453,11 +571,15 @@ pub struct Runtime {
     metrics: RwLock<Arc<Metrics>>,
     active: Mutex<Option<Running>>,
     started: RwLock<Option<Instant>>,
+    audit: Arc<crate::cache::AuditState>,
+    audit_job: Mutex<Option<JoinHandle<()>>>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub running: bool,
+    pub cache_preferences: crate::preferences::CachePreferences,
+    pub audit: crate::cache::AuditProgress,
     pub settings: crate::connection::SettingsView,
     pub preferences: crate::preferences::Preferences,
     pub metrics: Snapshot,
@@ -497,6 +619,8 @@ impl Runtime {
             metrics: RwLock::new(Arc::new(Metrics::default())),
             active: Mutex::new(None),
             started: RwLock::new(None),
+            audit: Arc::new(Default::default()),
+            audit_job: Mutex::new(None),
         })
     }
     pub fn control_state(&self) -> ControlState {
@@ -527,6 +651,8 @@ impl Runtime {
         let cache_bytes = tokio::task::spawn_blocking(move || cache.usage()).await??;
         Ok(Status {
             running: started.is_some(),
+            cache_preferences: settings.cache_preferences,
+            audit: self.audit.progress.lock().unwrap().clone(),
             pac_url: settings.pac_url(),
             settings: crate::connection::SettingsView::new(&settings),
             preferences: settings.preferences,
@@ -555,6 +681,7 @@ impl Runtime {
         if active.is_some() {
             return Ok(());
         }
+        self.ensure_no_audit()?;
         let settings = self.settings.read().unwrap().clone();
         settings.validate()?;
         if matches!(settings.mode, Mode::Http | Mode::Socks5) {
@@ -633,6 +760,9 @@ impl Runtime {
                 crate::probe::monitor(probe, target).await;
             });
         }
+        context
+            .configure_background(context.settings.cache_preferences)
+            .await;
         tracing::info!(mode, "proxy_started");
         *active = Some(Running { context, listener });
         *self.started.write().unwrap() = Some(
@@ -653,11 +783,19 @@ impl Runtime {
         if let Some(running) = active.take() {
             *self.started.write().unwrap() = None;
             running.context.cancel.cancel();
+            running
+                .context
+                .configure_background(crate::preferences::CachePreferences {
+                    prefetch_enabled: false,
+                    warmup_enabled: false,
+                })
+                .await;
             let _ = running.listener.await;
             running.context.tasks.close();
             running.context.tasks.wait().await;
             tracing::info!("proxy_stopped");
         }
+        self.cancel_audit().await?;
         for target in 0..3 {
             self.metrics.read().unwrap().reset_probe(target);
         }
@@ -668,9 +806,11 @@ impl Runtime {
     pub async fn save(&self, mut settings: Settings, password: Option<String>) -> Result<()> {
         let _operation = self.operation().await;
         self.cancel_proxy_test(None).await;
+        self.ensure_no_audit()?;
         settings.validate()?;
         let old = self.settings.read().unwrap().clone();
         settings.preferences = old.preferences;
+        settings.cache_preferences = old.cache_preferences;
         let started = *self.started.read().unwrap();
         if started.is_some()
             && (settings.listen_port != old.listen_port
@@ -784,12 +924,110 @@ impl Runtime {
         *self.settings.write().unwrap() = settings;
         Ok(())
     }
+    fn ensure_no_audit(&self) -> Result<()> {
+        if self.audit.progress.lock().unwrap().running {
+            bail!(ErrorCode::CacheMaintenanceBusy);
+        }
+        Ok(())
+    }
+    pub async fn save_cache_preferences(
+        &self,
+        patch: crate::preferences::CachePreferencePatch,
+    ) -> Result<crate::preferences::CachePreferences> {
+        let _operation = self.operation().await;
+        self.cancel_proxy_test(None).await;
+        let active = self.active.lock().await;
+        let mut settings = self.settings.read().unwrap().clone();
+        if let Some(value) = patch.prefetch_enabled {
+            settings.cache_preferences.prefetch_enabled = value;
+        }
+        if let Some(value) = patch.warmup_enabled {
+            settings.cache_preferences.warmup_enabled = value;
+        }
+        let next = settings.clone();
+        let root = self.root.clone();
+        tokio::task::spawn_blocking(move || next.save(&root))
+            .await?
+            .context(ErrorCode::ConfigWriteFailed)?;
+        *self.settings.write().unwrap() = settings.clone();
+        if let Some(running) = &*active {
+            running
+                .context
+                .configure_background(settings.cache_preferences)
+                .await;
+        }
+        Ok(settings.cache_preferences)
+    }
+    pub async fn start_audit(&self) -> Result<()> {
+        let _operation = self.operation().await;
+        if self.control_state().shutting_down {
+            bail!(ErrorCode::NativeOperationFailed);
+        }
+        let active = self.active.lock().await;
+        if active.is_some() {
+            bail!(ErrorCode::StopRequired);
+        }
+        let mut job = self.audit_job.lock().await;
+        self.ensure_no_audit()?;
+        if let Some(previous) = job.take() {
+            let _ = previous.await;
+        }
+        self.audit
+            .cancel
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        *self.audit.progress.lock().unwrap() = crate::cache::AuditProgress {
+            running: true,
+            ..Default::default()
+        };
+        let cache = self.cache.clone();
+        let state = self.audit.clone();
+        self.control.send_modify(|state| state.maintenance = true);
+        let control = self.control.clone();
+        #[cfg(feature = "internal-test")]
+        let hold_marker = self.root.join(".internal-audit-hold");
+        *job = Some(tokio::spawn(async move {
+            let progress = state.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                #[cfg(feature = "internal-test")]
+                {
+                    let deadline = Instant::now() + Duration::from_secs(10);
+                    while hold_marker.exists()
+                        && !progress.cancel.load(std::sync::atomic::Ordering::Relaxed)
+                        && Instant::now() < deadline
+                    {
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                }
+                cache.audit(&progress)
+            })
+            .await;
+            let mut p = state.progress.lock().unwrap();
+            if !matches!(result, Ok(Ok(()))) {
+                p.failed += 1;
+            }
+            p.cancelled = state.cancel.load(std::sync::atomic::Ordering::Relaxed);
+            p.running = false;
+            control.send_modify(|state| state.maintenance = false);
+        }));
+        Ok(())
+    }
+    pub async fn cancel_audit(&self) -> Result<()> {
+        let mut handle = self.audit_job.lock().await;
+        self.audit
+            .cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(job) = handle.take() {
+            job.await.context(ErrorCode::CacheAuditFailed)?;
+        }
+        Ok(())
+    }
     pub async fn clear_cache(&self) -> Result<()> {
         let _operation = self.operation().await;
         let active = self.active.lock().await;
         if active.is_some() {
             bail!(ErrorCode::StopRequired);
         }
+        self.ensure_no_audit()?;
         let cache = self.cache.clone();
         tokio::task::spawn_blocking(move || cache.clear()).await??;
         Ok(())
@@ -835,6 +1073,7 @@ impl Runtime {
         if self.active.lock().await.is_some() {
             bail!(ErrorCode::StopRequired);
         }
+        self.ensure_no_audit()?;
         Self::probe_routed(settings, password)
             .await
             .map(|latency_ms| ConnectionProbe { latency_ms })

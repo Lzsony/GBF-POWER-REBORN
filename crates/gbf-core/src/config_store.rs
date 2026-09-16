@@ -122,6 +122,33 @@ mod tests {
         }
     }
     #[test]
+    fn schema_one_without_cache_preferences_retains_settings_and_defaults_background_features() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config.json");
+        let bytes = br#"{"schemaVersion":1,"settings":{"listenPort":18123,"cacheLimitGb":7,"httpsCache":false,"preferences":{"theme":"dark","language":"zh-CN"}}}"#;
+        fs::write(&path, bytes).unwrap();
+        let document = load(root.path()).unwrap();
+        assert_eq!(document.schema_version, 1);
+        assert_eq!(document.settings.listen_port, 18123);
+        assert_eq!(document.settings.cache_limit_gb, 7);
+        assert_eq!(
+            document.settings.preferences.language,
+            crate::preferences::Language::Simplified
+        );
+        assert!(document.settings.cache_preferences.prefetch_enabled);
+        assert!(document.settings.cache_preferences.warmup_enabled);
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        document.settings.save(root.path()).unwrap();
+        let saved = load(root.path()).unwrap();
+        assert_eq!(saved.schema_version, 1);
+        assert_eq!(
+            saved.settings.cache_preferences,
+            document.settings.cache_preferences
+        );
+        assert_eq!(saved.settings.listen_port, 18123);
+    }
+
+    #[test]
     fn concurrent_section_updates_do_not_lose_changes() {
         let dir = tempfile::tempdir().unwrap();
         initialize(dir.path()).unwrap();

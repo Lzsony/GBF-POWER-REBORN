@@ -4,7 +4,7 @@ GBF POWER REBORN 是面向 macOS 與 Windows 的網路體驗優化專案，透�
 
 ## 開發狀態
 
-**0.1.0 客戶端開發版。** 提供直連、上游代理與基本本機快取，介面支援簡體及繁體中文。加速選項尚未開放；Control、SSH Gateway 與服務端部署工具尚未實作。平台驗證範圍見[驗證紀錄](docs/validation.md)。
+**0.2.0 客戶端開發版。** 提供直連、上游代理與本機快取，介面支援簡體及繁體中文。加速選項尚未開放；Control、SSH Gateway 與服務端部署工具尚未實作。平台驗證範圍見[驗證紀錄](docs/validation.md)。
 
 ## 平台與技術棧
 
@@ -29,7 +29,7 @@ GBF POWER REBORN 是面向 macOS 與 Windows 的網路體驗優化專案，透�
 
 現階段的應用支援範圍暫限於 Granblue Fantasy（GBF）。
 
-- **靜態資源快取**：在本機保存符合白名單及快取條件的素材，維持內容完整性與上游快取語意。靜態 HTTPS 快取的本機 CA 信任與 TLS 終止範圍見[架構規格](docs/architecture.md)。
+- **靜態資源快取**：在本機保存符合白名單及快取條件的素材，包含素材預取、記憶體預熱與可取消的快取體檢，維持內容完整性與上游快取語意。詳見[快取規格](docs/cache.md)。靜態 HTTPS 快取的本機 CA 信任與 TLS 終止範圍見[架構規格](docs/architecture.md)。
 - **動態流量轉發**：維持瀏覽器與原始服務之間的端到端 TLS；轉發層不解密、不修改、不快取、不重播動態流量。
 - **統計與常駐**：顯示請求、快取下載、命中率、即時流量及 JP／Steam 公開頁品質；關閉或最小化視窗後保持背景執行。
 
@@ -57,6 +57,7 @@ npm run desktop
 
 - [文件索引與開發狀態](docs/README.md)
 - [系統架構](docs/architecture.md)
+- [本機快取與背景工作](docs/cache.md)
 - [資料處理與隱私](docs/privacy.md)
 - [自建服務部署規格](docs/self-hosted-gateway.md)
 - [安全政策](SECURITY.md)
