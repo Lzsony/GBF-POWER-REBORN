@@ -16,7 +16,7 @@ src-tauri/gen/
 
 # Local caches and runtime data
 .cache/
-cache/
+/cache/
 logs/
 *.log
 *.db

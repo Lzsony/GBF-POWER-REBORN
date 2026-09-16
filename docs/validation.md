@@ -59,7 +59,7 @@ CI 產物依賴系統 WebView2 Runtime，未做 Authenticode 簽署。自動測�
 | 隔離 CA／Keychain | 另行 opt-in 執行 1 項通過，完成測試材料清理 |
 | macOS arm64 release build | 通過 |
 | App／DMG 封裝 | arm64、版本／識別、授權文件、ad-hoc 簽章及唯讀掛載內容一致性通過 |
-| Windows CI | 工作流程已建立，尚未在 GitHub 執行 |
+| Windows CI | 首次執行因提交缺少兩個快取模組而在 Rust 格式檢查停止；修正待重跑 |
 
 核心預設忽略項目分別為受控子程序替身與 opt-in CA／Keychain 測試；前者由命令測試啟動，後者已另行驗證。介面測試使用模擬 IPC，WKWebView 與原生生命週期另行驗證實際整合。
 
