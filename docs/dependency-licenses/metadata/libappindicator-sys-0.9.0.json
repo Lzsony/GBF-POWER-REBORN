@@ -1,0 +1,13 @@
+{
+  "name": "libappindicator-sys",
+  "version": "0.9.0",
+  "authors": [],
+  "license": "Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": null,
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "eafd1e3682a1247f595410266091e9684021cb6f",
+  "pathInVcs": "sys",
+  "registryPackageChecksum": "6e9ec52138abedcc58dc17a7c6c0c00a2bdb4f3427c7f63fa97fd0d859155caf"
+}

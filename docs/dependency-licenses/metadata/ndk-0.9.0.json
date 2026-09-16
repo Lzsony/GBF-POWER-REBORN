@@ -1,0 +1,15 @@
+{
+  "name": "ndk",
+  "version": "0.9.0",
+  "authors": [
+    "The Rust Mobile contributors"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/rust-mobile/ndk",
+  "homepage": "https://github.com/rust-mobile/ndk",
+  "ecosystem": "rust",
+  "commit": "49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25",
+  "pathInVcs": "ndk",
+  "registryPackageChecksum": "c3f42e7bbe13d351b6bead8286a43aac9534b82bd3cc43e47037f012ebfd62d4"
+}

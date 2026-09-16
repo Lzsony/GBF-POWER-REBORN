@@ -1,0 +1,15 @@
+{
+  "name": "objc2",
+  "version": "0.6.4",
+  "authors": [
+    "Mads Marquart <mads@marquart.dk>"
+  ],
+  "license": "MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+  "pathInVcs": "crates/objc2",
+  "registryPackageChecksum": "3a12a8ed07aefc768292f076dc3ac8c48f3781c8f2d5851dd3d98950e8c5a89f"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "r-efi",
+  "version": "5.3.0",
+  "authors": [],
+  "license": "MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+  "license_file": null,
+  "repository": "https://github.com/r-efi/r-efi",
+  "homepage": "https://github.com/r-efi/r-efi/wiki",
+  "ecosystem": "rust",
+  "commit": "97b55bed1c2c91dcbf787674849f05337ff80b33",
+  "pathInVcs": "",
+  "registryPackageChecksum": "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+}

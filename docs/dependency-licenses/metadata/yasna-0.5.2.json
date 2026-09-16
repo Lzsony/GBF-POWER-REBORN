@@ -1,0 +1,15 @@
+{
+  "name": "yasna",
+  "version": "0.5.2",
+  "authors": [
+    "Masaki Hara <ackie.h.gmai@gmail.com>"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/qnighy/yasna.rs",
+  "homepage": "https://github.com/qnighy/yasna.rs",
+  "ecosystem": "rust",
+  "commit": "b7e65f9a4c317494cce2d18ea02b3d6eaaea7985",
+  "pathInVcs": "",
+  "registryPackageChecksum": "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "objc2-core-foundation",
+  "version": "0.3.2",
+  "authors": [],
+  "license": "Zlib OR Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+  "pathInVcs": "framework-crates/objc2-core-foundation",
+  "registryPackageChecksum": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
+}

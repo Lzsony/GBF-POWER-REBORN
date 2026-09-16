@@ -1,0 +1,17 @@
+{
+  "name": "dlopen2",
+  "version": "0.8.2",
+  "authors": [
+    "Szymon Wieloch <szymon.wieloch@gmail.com>",
+    "Ahmed Masud <ahmed.masud@saf.ai>",
+    "OpenByte <development.openbyte@gmail.com>"
+  ],
+  "license": "MIT",
+  "license_file": null,
+  "repository": "https://github.com/OpenByteDev/dlopen2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "cc80e4a0a90d499b677fdf7743699b4b3a43a989",
+  "pathInVcs": "dlopen2",
+  "registryPackageChecksum": "5e2c5bd4158e66d1e215c49b837e11d62f3267b30c92f1d171c4d3105e3dc4d4"
+}

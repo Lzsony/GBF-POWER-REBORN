@@ -1,0 +1,15 @@
+{
+  "name": "ndk-sys",
+  "version": "0.6.0+11769913",
+  "authors": [
+    "The Rust Windowing contributors"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/rust-mobile/ndk",
+  "homepage": "https://github.com/rust-mobile/ndk",
+  "ecosystem": "rust",
+  "commit": "49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25",
+  "pathInVcs": "ndk-sys",
+  "registryPackageChecksum": "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
+}

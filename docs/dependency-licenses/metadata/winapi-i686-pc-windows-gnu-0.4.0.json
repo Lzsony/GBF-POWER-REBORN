@@ -1,0 +1,15 @@
+{
+  "name": "winapi-i686-pc-windows-gnu",
+  "version": "0.4.0",
+  "authors": [
+    "Peter Atashian <retep998@gmail.com>"
+  ],
+  "license": "MIT/Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/retep998/winapi-rs",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": null,
+  "pathInVcs": null,
+  "registryPackageChecksum": "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "objc2-web-kit",
+  "version": "0.3.2",
+  "authors": [],
+  "license": "Zlib OR Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+  "pathInVcs": "framework-crates/objc2-web-kit",
+  "registryPackageChecksum": "b2e5aaab980c433cf470df9d7af96a7b46a9d892d521a2cbbb2f8a4c16751e7f"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "alloc-stdlib",
+  "version": "0.2.4",
+  "authors": [
+    "Daniel Reiter Horn <danielrh@dropbox.com>"
+  ],
+  "license": "BSD-3-Clause",
+  "license_file": null,
+  "repository": "https://github.com/dropbox/rust-alloc-no-stdlib",
+  "homepage": "https://github.com/dropbox/rust-alloc-no-stdlib",
+  "ecosystem": "rust",
+  "commit": "ae42d22078b98549e987d2f03d12df7b984fde47",
+  "pathInVcs": "alloc-stdlib",
+  "registryPackageChecksum": "0e76a019e91224d279006ff972f1e984179a6e9feb050adba6ce8274aef23195"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "objc2-core-graphics",
+  "version": "0.3.2",
+  "authors": [],
+  "license": "Zlib OR Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+  "pathInVcs": "framework-crates/objc2-core-graphics",
+  "registryPackageChecksum": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807"
+}

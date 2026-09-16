@@ -1,0 +1,13 @@
+{
+  "name": "webview2-com-sys",
+  "version": "0.38.2",
+  "authors": [],
+  "license": "MIT",
+  "license_file": null,
+  "repository": "https://github.com/wravery/webview2-rs",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "b74dc5e2b394044bea5191052868ce7a106c202c",
+  "pathInVcs": "crates/bindings",
+  "registryPackageChecksum": "381336cfffd772377d291702245447a5251a2ffa5bad679c99e61bc48bacbf9c"
+}

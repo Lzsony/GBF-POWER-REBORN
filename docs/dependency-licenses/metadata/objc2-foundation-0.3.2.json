@@ -1,0 +1,13 @@
+{
+  "name": "objc2-foundation",
+  "version": "0.3.2",
+  "authors": [],
+  "license": "MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+  "pathInVcs": "framework-crates/objc2-foundation",
+  "registryPackageChecksum": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
+}

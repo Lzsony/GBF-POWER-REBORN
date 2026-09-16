@@ -1,0 +1,13 @@
+{
+  "name": "objc2-quartz-core",
+  "version": "0.3.2",
+  "authors": [],
+  "license": "Zlib OR Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+  "pathInVcs": "framework-crates/objc2-quartz-core",
+  "registryPackageChecksum": "96c1358452b371bf9f104e21ec536d37a650eb10f7ee379fff67d2e08d537f1f"
+}

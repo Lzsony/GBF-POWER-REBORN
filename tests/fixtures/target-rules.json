@@ -1,0 +1,407 @@
+[
+  {
+    "host": "gamewith.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "login.gamewith.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "a.b.gamewith.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "GAMEWITH.JP.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "evilgamewith.jp",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "gamewith.jp.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "mbga.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "login.mbga.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "a.b.mbga.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "MBGA.JP.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "evilmbga.jp",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "mbga.jp.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "mobage.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "login.mobage.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "a.b.mobage.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "MOBAGE.JP.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "evilmobage.jp",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "mobage.jp.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "dmm.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "login.dmm.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "a.b.dmm.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "DMM.COM.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "evildmm.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "dmm.com.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "dmm.co.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "login.dmm.co.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "a.b.dmm.co.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "DMM.CO.JP.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "evildmm.co.jp",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "dmm.co.jp.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "dmmgames.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "login.dmmgames.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "a.b.dmmgames.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "DMMGAMES.COM.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "evildmmgames.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "dmmgames.com.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a-gbf.akamaized.net",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "PRD-GAME-A-GBF.AKAMAIZED.NET.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.prd-game-a-gbf.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a-gbf.akamaized.net.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "code.createjs.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "CODE.CREATEJS.COM.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.code.createjs.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "code.createjs.com.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "code.jquery.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "CODE.JQUERY.COM.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.code.jquery.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "code.jquery.com.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "cdnjs.cloudflare.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "CDNJS.CLOUDFLARE.COM.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.cdnjs.cloudflare.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "cdnjs.cloudflare.com.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "cdn.jsdelivr.net",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "CDN.JSDELIVR.NET.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.cdn.jsdelivr.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "cdn.jsdelivr.net.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "fonts.fontplus.dev",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "FONTS.FONTPLUS.DEV.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.fonts.fontplus.dev",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "fonts.fontplus.dev.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "www.datadoghq-browser-agent.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "WWW.DATADOGHQ-BROWSER-AGENT.COM.",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "sub.www.datadoghq-browser-agent.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "www.datadoghq-browser-agent.com.evil.com",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "game.granbluefantasy.jp",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "steam.granbluefantasy.com",
+    "target": true,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a-granbluefantasy.akamaized.net",
+    "target": true,
+    "asset": true
+  },
+  {
+    "host": "GBF.AKAMAIZED.NET..",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "other.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "granbluefantasy.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "gbf.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a1-granbluefantasy.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a1-granbluefantasy-steam.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a2-granbluefantasy.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a2-granbluefantasy-steam.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a3-granbluefantasy.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a3-granbluefantasy-steam.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a4-granbluefantasy.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a4-granbluefantasy-steam.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a5-granbluefantasy.akamaized.net",
+    "target": false,
+    "asset": false
+  },
+  {
+    "host": "prd-game-a5-granbluefantasy-steam.akamaized.net",
+    "target": false,
+    "asset": false
+  }
+]

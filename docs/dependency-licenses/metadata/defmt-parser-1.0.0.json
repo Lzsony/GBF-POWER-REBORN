@@ -1,0 +1,15 @@
+{
+  "name": "defmt-parser",
+  "version": "1.0.0",
+  "authors": [
+    "The Knurling-rs developers"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/knurling-rs/defmt",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "4a8cdb44891ed57b8ff5a023b6bec7137c48708f",
+  "pathInVcs": "parser",
+  "registryPackageChecksum": "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
+}

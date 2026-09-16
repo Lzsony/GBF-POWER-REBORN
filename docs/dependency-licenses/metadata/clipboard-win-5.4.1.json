@@ -1,0 +1,15 @@
+{
+  "name": "clipboard-win",
+  "version": "5.4.1",
+  "authors": [
+    "Douman <douman@gmx.se>"
+  ],
+  "license": "BSL-1.0",
+  "license_file": null,
+  "repository": "https://github.com/DoumanAsh/clipboard-win",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "3b27cf2bfd1adcfa6e0264eb51c1025ddaf0f342",
+  "pathInVcs": "",
+  "registryPackageChecksum": "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4"
+}

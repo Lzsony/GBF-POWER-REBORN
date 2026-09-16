@@ -1,0 +1,13 @@
+{
+  "name": "valuable",
+  "version": "0.1.1",
+  "authors": [],
+  "license": "MIT",
+  "license_file": null,
+  "repository": "https://github.com/tokio-rs/valuable",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "9efc29b6e58cef28f6566a47aa7e142a55fead77",
+  "pathInVcs": "valuable",
+  "registryPackageChecksum": "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
+}

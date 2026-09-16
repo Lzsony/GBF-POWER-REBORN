@@ -1,0 +1,13 @@
+{
+  "name": "webview2-com-macros",
+  "version": "0.8.1",
+  "authors": [],
+  "license": "MIT",
+  "license_file": null,
+  "repository": "https://github.com/wravery/webview2-rs",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "dffa41a8a46d3f5565eefbff2de57d38d399f158",
+  "pathInVcs": "crates/callback-macros",
+  "registryPackageChecksum": "67a921c1b6914c367b2b823cd4cde6f96beec77d30a939c8199bb377cf9b9b54"
+}

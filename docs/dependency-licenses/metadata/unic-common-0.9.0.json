@@ -1,0 +1,15 @@
+{
+  "name": "unic-common",
+  "version": "0.9.0",
+  "authors": [
+    "The UNIC Project Developers"
+  ],
+  "license": "MIT/Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/open-i18n/rust-unic/",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "5878605364af97a3358368a6eaef02104af2e016",
+  "pathInVcs": null,
+  "registryPackageChecksum": "80d7ff825a6a654ee85a63e80f92f054f904f21e7d12da4e22f9834a4aaa35bc"
+}

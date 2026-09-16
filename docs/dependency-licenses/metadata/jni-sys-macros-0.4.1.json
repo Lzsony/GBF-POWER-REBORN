@@ -1,0 +1,15 @@
+{
+  "name": "jni-sys-macros",
+  "version": "0.4.1",
+  "authors": [
+    "Robert Bragg <robert@sixbynine.org>"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "license_file": null,
+  "repository": "https://github.com/jni-rs/jni-sys",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "64d77b7a5f119d7b55b4e2c169a4668067ff59e6",
+  "pathInVcs": "jni-sys-macros",
+  "registryPackageChecksum": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264"
+}

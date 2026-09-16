@@ -1,0 +1,15 @@
+{
+  "name": "selectors",
+  "version": "0.36.1",
+  "authors": [
+    "The Servo Project Developers"
+  ],
+  "license": "MPL-2.0",
+  "license_file": null,
+  "repository": "https://github.com/servo/stylo",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "635e1a19d02960588a00e189bd4bd5bdb150ec3d",
+  "pathInVcs": "selectors",
+  "registryPackageChecksum": "c5d9c0c92a92d33f08817311cf3f2c29a3538a8240e94a6a3c622ce652d7e00c"
+}

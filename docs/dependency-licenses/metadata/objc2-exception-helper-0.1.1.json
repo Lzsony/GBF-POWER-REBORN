@@ -1,0 +1,15 @@
+{
+  "name": "objc2-exception-helper",
+  "version": "0.1.1",
+  "authors": [
+    "Mads Marquart <mads@marquart.dk>"
+  ],
+  "license": "Zlib OR Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://github.com/madsmtm/objc2",
+  "homepage": null,
+  "ecosystem": "rust",
+  "commit": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+  "pathInVcs": "crates/objc2-exception-helper",
+  "registryPackageChecksum": "c7a1c5fbb72d7735b076bb47b578523aedc40f3c439bea6dfd595c089d79d98a"
+}

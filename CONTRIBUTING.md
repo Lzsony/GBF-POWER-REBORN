@@ -11,10 +11,10 @@
 1. 檢查工作目錄及暫存區，保留既有 staged／unstaged 改動。
 2. 執行與變更相稱的驗證。文件檢查連結、術語、狀態一致性及敏感資料；程式碼修改驗證受影響行為及必要邊界。
 3. 以明確檔案清單或區塊選取暫存變更，排除無關內容。
-4. 檢查 `git diff --cached` 並執行 `git diff --cached --check`，提供變更摘要、驗證結果及建議提交訊息。
-5. **Agent 完成 stage 後交付 review，commit 由使用者手動執行。** 不自動 commit、amend、推送或發布。
+4. 檢查 `git diff --cached` 並執行 `git diff --cached --check`，提供變更摘要、驗證結果及完整提交訊息。
+5. **Agent 在 stage 後提供可編輯的 message 確認表單。使用者修改並確認後，Agent 以最終訊息提交當次已審閱的暫存內容，不重複詢問。** 確認前不提交，也不自行 amend、推送或發布。
 
-review 後的修訂須重新驗證並更新 stage。既有暫存內容保留原狀，交付時明確列出變更範圍及尚未驗證事項。
+review 後的修訂須重新驗證並更新 stage 與 message，保留使用者的訊息修改。確認後如暫存內容變動，須重新交付 review。既有暫存內容保留原狀，交付時明確列出變更範圍及尚未驗證事項。
 
 ## Commit message
 
@@ -34,7 +34,8 @@ review 後的修訂須重新驗證並更新 stage。既有暫存內容保留原�
 | scope | 英文，可省略 |
 | gitmoji | 位於冒號及空格後，例如 `✨`、`🐛`、`📝`、`♻️`、`✅`、`🎉` |
 | description | 簡短繁體中文敘述，技術標識保留英文 |
-| body、footer | 選填，使用英文 |
+| body | 選填，以繁體中文濃縮主要變更與必要驗證結果，技術標識保留英文 |
+| footer | 選填，使用英文 |
 
 不相容變更使用 `!` 或英文 `BREAKING CHANGE:` footer。
 

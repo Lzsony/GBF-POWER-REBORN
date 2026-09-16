@@ -1,0 +1,15 @@
+{
+  "name": "tauri-plugin",
+  "version": "2.6.3",
+  "authors": [
+    "Tauri Programme within The Commons Conservancy"
+  ],
+  "license": "Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://github.com/tauri-apps/tauri",
+  "homepage": "https://tauri.app/",
+  "ecosystem": "rust",
+  "commit": "6f6ab1207bb3923c2721fbc67d2fdb1c8deb0c7a",
+  "pathInVcs": "crates/tauri-plugin",
+  "registryPackageChecksum": "74be5dd4bed9afbd145e5716b5fa2ec28cbc29c34ffa61c258c9273d896c8020"
+}

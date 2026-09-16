@@ -1,0 +1,15 @@
+{
+  "name": "http-serde",
+  "version": "2.1.1",
+  "authors": [
+    "Kornel <kornel@geekhood.net>"
+  ],
+  "license": "Apache-2.0 OR MIT",
+  "license_file": null,
+  "repository": "https://gitlab.com/kornelski/http-serde",
+  "homepage": "https://lib.rs/crates/http-serde",
+  "ecosystem": "rust",
+  "commit": "c2403fb3d64bc0db31a05ca5d340ff82686163b1",
+  "pathInVcs": "",
+  "registryPackageChecksum": "0f056c8559e3757392c8d091e796416e4649d8e49e88b8d76df6c002f05027fd"
+}

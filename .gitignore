@@ -3,6 +3,7 @@ node_modules/
 target/
 dist/
 build/
+*.tsbuildinfo
 artifacts/
 coverage/
 playwright-report/
@@ -35,6 +36,7 @@ logs/
 *.local.toml
 config.json
 config.toml
+!.cargo/config.toml
 config.yaml
 config.yml
 control.json

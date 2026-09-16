@@ -1,0 +1,52 @@
+[package]
+name = "gbf-core"
+version = "0.1.0"
+license = "AGPL-3.0-only"
+edition = "2021"
+
+[features]
+internal-test = []
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+bytes = "1"
+brotli = "8"
+flate2 = "1"
+futures-util = "0.3"
+http = "1"
+http-serde = "2"
+http-body-util = "0.1"
+h2 = "0.4"
+http-cache-semantics = "2"
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1", "http2"] }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+lru = "0.12"
+rcgen = { version = "0.13", features = ["x509-parser"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "socks", "stream", "http2"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+tokio-socks = "0.5"
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+time = "0.3"
+url = "2"
+percent-encoding = "2"
+tempfile = "3"
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+tempfile = "3"
+tracing-subscriber = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_Security", "Win32_Storage_FileSystem"] }

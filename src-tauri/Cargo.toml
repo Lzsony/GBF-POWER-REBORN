@@ -1,0 +1,39 @@
+[package]
+name = "gbf-power-reborn"
+version = "0.1.0"
+edition = "2021"
+default-run = "gbf-power-reborn"
+
+[features]
+internal-test = ["gbf-core/internal-test", "objc2-foundation/NSRunLoop", "objc2-foundation/NSTimer", "objc2-foundation/NSDate"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+gbf-core = { path = "../crates/gbf-core" }
+anyhow = "1"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+time = { version = "0.3", features = ["formatting"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSApplication", "NSAlert"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSNotification", "NSOperation", "NSObject", "NSString", "NSLocale"] }
+block2 = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Globalization"] }
+
+[dev-dependencies]
+tempfile = "3"

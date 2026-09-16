@@ -1,5 +1,9 @@
 * text=auto eol=lf
 
+# Preserve verbatim third-party legal text, including its original whitespace.
+docs/dependency-licenses/standard/*.txt -whitespace
+docs/dependency-licenses/texts/*.txt -whitespace
+
 *.png binary
 *.jpg binary
 *.jpeg binary

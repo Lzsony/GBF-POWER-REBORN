@@ -12,10 +12,11 @@
 
 - 修改前檢查 staged／unstaged 狀態，保留既有改動，不重設、覆蓋或擅自取消暫存。
 - 完成修改與驗證後，以明確檔案清單或區塊選取暫存任務範圍；同檔案改動無法安全區分時，先說明衝突。
-- 交付 staged diff、變更摘要、驗證結果與建議 commit message，由使用者 review 後手動 commit。
-- Agent 不執行 commit、amend 或建立隱含 commit 的操作，不自行推送、設定 remote 或發布。
-- review 後的修訂須重新驗證、更新 stage，並說明暫存內容的變更。
-- 提交格式為 `<type>(<scope>): <gitmoji> <description>`，scope 可省略；description 使用繁體中文，type、scope、body、footer 使用英文。gitmoji 放在冒號後，詳見[貢獻指南](CONTRIBUTING.md)。
+- 完成 stage 後，交付 staged diff、變更摘要、驗證結果，並準備完整 commit message，透過可編輯的確認表單交由使用者審閱。
+- 使用者確認表單或明確授權提交後，Agent 以使用者最終確認的 message 提交當次已審閱的暫存內容，不重複要求確認；確認前不執行 commit。
+- 不自行 amend、建立隱含 commit、推送、設定 remote 或發布。確認後若暫存內容有變動，重新交付 review，不能沿用對不同內容的確認。
+- review 後的修訂須重新驗證、更新 stage 及 message，並說明暫存內容的變更；保留使用者已修改的 message，僅在內容不再相符時提出調整。
+- 提交格式為 `<type>(<scope>): <gitmoji> <description>`，scope 可省略；description 與 body 使用繁體中文，body 濃縮為主要變更與必要驗證概要；type、scope、footer 及技術標識使用英文。gitmoji 放在冒號後，詳見[貢獻指南](CONTRIBUTING.md)。
 
 ## 驗證與交付
 
