@@ -18,6 +18,13 @@
 - review 後的修訂須重新驗證、更新 stage 及 message，並說明暫存內容的變更；保留使用者已修改的 message，僅在內容不再相符時提出調整。
 - 提交格式為 `<type>(<scope>): <gitmoji> <description>`，scope 可省略；description 與 body 使用繁體中文，body 濃縮為主要變更與必要驗證概要；type、scope、footer 及技術標識使用英文。gitmoji 放在冒號後，詳見[貢獻指南](CONTRIBUTING.md)。
 
+## 版本管理
+
+- 每批功能變更在 stage 前依[版本管理規範](CONTRIBUTING.md#版本管理)自動判定升版級別；以該批開始時的已提交版本為基準，按最高影響只升一次，review 修訂不重複累加。
+- 新功能升 MINOR，相容修復／效能改善升 PATCH；純文件、測試、格式、無行為變化的重構或 CI 維護不升版。`0.x` 不相容變更升 MINOR 並標記 breaking change；進入 `1.0.0` 須由使用者明確決定。
+- 同步套件、鎖定檔、Tauri、介面、打包檢查與目前版本文件，保留第三方版本及歷史驗證紀錄；`schemaVersion` 獨立管理。
+- 交付摘要列出版本變更及理由，或說明不升版；版本修改與功能／修復一併暫存，不自動建立 tag 或 Release。使用者指定版本優先，不自行降版或以相同已發布版本覆蓋不同內容。
+
 ## 驗證與交付
 
 - 驗證力度與改動相稱；文件檢查連結、術語、狀態一致性及 `git diff --cached --check`，不新增複述文件內容的功能測試。
