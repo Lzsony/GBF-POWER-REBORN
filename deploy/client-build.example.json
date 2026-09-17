@@ -1,0 +1,5 @@
+{
+  "deploymentId": "my-deployment",
+  "url": "https://control.example.invalid:8443",
+  "caCertificateFile": "control-public.crt"
+}

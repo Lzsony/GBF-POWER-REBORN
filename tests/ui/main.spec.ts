@@ -7,6 +7,7 @@ const languageNames = { 'zh-CN': '简体', 'zh-TW': '繁體', ja: '日本語', e
 
 type Options = {
   direct?: boolean; untrusted?: boolean; missingSamples?: boolean;
+  configured?: boolean; authorized?: boolean;
   revealDelay?: number; revealFailure?: boolean; installFailure?: boolean;
   preferencesDelay?: number; preferencesFailure?: boolean;
   failTest?: boolean; holdProxyTest?: boolean; proxySaveFailure?: boolean;
@@ -20,6 +21,9 @@ async function desktop(page: Page, options: Options = {}) {
     state.settings.mode = options.direct ? 'direct' : 'proxy';
     state.settings.proxyUrl = 'socks5://user:••••@127.0.0.1:7890';
     state.settings.hasAuthentication = true;
+    state.authorization.configured = !!options.configured;
+    state.authorization.state = options.authorized ? 'active' : 'unactivated';
+    if (options.authorized) state.accelerationLines = [{id:'fixture-east',name:'自建節點 A',revision:'r1'},{id:'fixture-west',name:'自建節點 B',revision:'r1'}];
     const savedSettings = sessionStorage.getItem('test-settings');
     if (savedSettings) state.settings = JSON.parse(savedSettings);
     const savedCachePreferences = sessionStorage.getItem('test-cache-preferences');
@@ -56,6 +60,17 @@ async function desktop(page: Page, options: Options = {}) {
           if (command === 'main_window_visible') return true;
           if (command === 'get_native_control') return { state: { running: state.running, busy: false, maintenance: false, shuttingDown: false }, notice: null };
           if (command === 'get_status') return structuredClone(state);
+          if (command === 'get_authorization_dialog') return {registered:state.authorization.state==='active',code:null};
+          if (command === 'refresh_authorization') return structuredClone(state.authorization);
+          if (command === 'activate_authorization') {
+            if (!args.code) throw {code:'AUTH_REQUIRED'};
+            state.authorization.state = 'active';
+            state.accelerationLines = [{id:'fixture-east',name:'自建節點 A',revision:'r1'},{id:'fixture-west',name:'自建節點 B',revision:'r1'}];
+            return;
+          }
+          if (command === 'unbind_authorization') {
+            state.authorization.state = 'unactivated'; state.accelerationLines = []; return;
+          }
           if (command === 'reveal_proxy_url') {
             if (options.revealDelay) await new Promise(r => setTimeout(r, options.revealDelay));
             if (options.revealFailure) throw { code: 'SECRET_READ_FAILED' };
@@ -96,8 +111,16 @@ async function desktop(page: Page, options: Options = {}) {
             state.preferences = args.preferences as typeof state.preferences;
             sessionStorage.setItem('test-preferences', JSON.stringify(state.preferences));
           }
-          if (command === 'start_proxy') state.running = true;
-          if (command === 'stop_proxy') state.running = false;
+          if (command === 'start_proxy') {
+            state.running = true;
+            if (state.settings.mode === 'accelerate') {
+              state.acceleration.state = 'connected'; state.acceleration.lineId = state.settings.lineSelection==='auto'?'fixture-east':state.settings.selectedLineId;
+              state.metrics.network.lineLatencyMs = 42;
+            }
+          }
+          if (command === 'stop_proxy') {state.running = false; state.acceleration.state = 'disconnected'; state.acceleration.lineId = null;}
+          if (command === 'test_line' || command === 'test_auto_lines') return {testId:args.testId,lineId:command==='test_line'?args.lineId:'fixture-east',revision:'r1',medianMs:42,state:'success',completedAt:Date.now()};
+          if (command === 'cancel_line_test') return;
           if (command === 'test_proxy_url') {
             if (options.holdProxyTest) await new Promise<void>(resolve => Object.assign(window, { __finishProxyTest: resolve }));
             return { testId: args.testId, connected: !options.failTest, state: options.failTest ? 'failed' : 'success' };
@@ -156,7 +179,7 @@ for (const [locale, language] of [['en-US', 'en'], ['ja-JP', 'ja'], ['fr-FR', 'e
     await expect(page).toHaveTitle('GBF POWER REBORN');
     await expect(page.locator('html')).toHaveAttribute('lang', language);
     await expect(page.locator('.brand')).toHaveText('GBF POWER REBORN');
-    await expect(page.locator('.statusbar')).toContainText('v0.3.0');
+    await expect(page.locator('.statusbar')).toContainText('v0.4.0');
     await expect(page.locator('.start-button')).toBeDisabled();
     await expect(page.getByRole('status')).toHaveText(dictionaries[language].stoppedNotice);
   });
@@ -185,6 +208,30 @@ test('only direct and proxy can be selected by keyboard or pointer', async ({ pa
   await expect(select).toHaveValue('proxy');
   expect((await commands(page)).filter(c => c.command === 'save_settings').every(c => (c.args.input as { mode: string }).mode !== 'accelerate')).toBe(true);
   await expect(page.locator('.statistics .metric').first()).toHaveText('線路延遲—');
+});
+
+test('configured client activates and selects Control-provided Gateway lines', async ({ page }) => {
+  await openDesktop(page, { direct:true, configured:true });
+  await menu(page);
+  await page.getByRole('menuitem', {name:/授權/}).click();
+  await page.getByLabel('授權碼').fill('test-access-code');
+  await page.getByRole('button', {name:'激活'}).click();
+  await expect(page.getByRole('dialog', {name:'授權'})).toContainText('授權有效');
+  await page.getByRole('button', {name:'關閉對話框'}).click();
+  const mode = page.getByLabel('模式', {exact:true});
+  await expect(mode.locator('[value=accelerate]')).toBeEnabled();
+  await mode.selectOption('accelerate');
+  const line = page.getByLabel('線路');
+  await expect(line.locator('option')).toHaveText(['自動選擇','自建節點 A','自建節點 B']);
+  await page.getByRole('button', {name:'測試'}).click();
+  await expect(page.getByRole('status')).toContainText('自建節點 A · 42 ms');
+  await line.selectOption('fixture-west');
+  await page.getByRole('button', {name:'啟動'}).click();
+  await expect(page.locator('.statistics .metric').first()).toHaveText('線路延遲42 ms');
+  const calls = await commands(page);
+  expect(calls.some(call=>call.command==='activate_authorization')).toBe(true);
+  expect(calls.some(call=>call.command==='test_auto_lines')).toBe(true);
+  expect(calls.some(call=>call.command==='save_settings'&&(call.args.input as {selectedLineId?:string}).selectedLineId==='fixture-west')).toBe(true);
 });
 
 test('menu has supported language and cache controls with keyboard navigation', async ({ page }) => {
@@ -415,6 +462,26 @@ for (const language of ['zh-CN', 'zh-TW', 'ja', 'en'] as const) for (const mode 
     for (const selector of ['.footer-controls', '.statusbar']) { const box = await page.locator(selector).boundingBox(); expect(box!.y).toBeGreaterThanOrEqual(0); expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1); }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (viewport.height === 520) expect(await page.locator('.content').evaluate(e => e.scrollHeight <= e.clientHeight)).toBe(true);
+  });
+}
+
+for (const language of ['zh-CN', 'zh-TW', 'ja', 'en'] as const) {
+  test(`${language} acceleration controls fit the compact window`, async ({ page }) => {
+    await openDesktop(page, {direct:true,configured:true,authorized:true});
+    await page.setViewportSize({width:380,height:420});
+    await menu(page);
+    await page.getByRole('menuitemradio', {name:languageNames[language],exact:true}).click();
+    await page.keyboard.press('Escape');
+    const t = dictionaries[language];
+    await page.getByLabel(t.mode,{exact:true}).selectOption('accelerate');
+    await expect(page.getByLabel(t.line)).toHaveValue('auto:');
+    await page.locator('.footer-controls').scrollIntoViewIfNeeded();
+    for (const selector of ['.line-field','.footer-controls','.statusbar']) {
+      const box = await page.locator(selector).boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x+box!.width).toBeLessThanOrEqual(381);
+      expect(box!.y+box!.height).toBeLessThanOrEqual(421);
+    }
   });
 }
 

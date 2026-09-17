@@ -212,6 +212,7 @@ fn handle(
         let mut diagnostic = Diagnostic::new();
         diagnostic.mode = match state.settings.mode {
             crate::config::Mode::Direct => "direct",
+            crate::config::Mode::Accelerate => "accelerate",
             crate::config::Mode::Http => "http",
             crate::config::Mode::Socks5 => "socks5",
         };

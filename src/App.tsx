@@ -5,6 +5,7 @@ import { visibilityPoll } from './polling';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import SettingsMenu, { type MenuAction } from './SettingsMenu';
+import { useLineTests } from './useLineTests';
 import { useProxyUrl } from './useProxyUrl';
 import appLogo from '../src-tauri/icons/icon.png';
 import { initialSettings, initialStatus, type Settings, type Status, type Preferences, type CachePreferences } from './types';
@@ -33,6 +34,13 @@ export default function App() {
   const [auditError, setAuditError] = useState<MessageKey | null>(null);
   const auditAction = useRef(false);
   const auditDialog = useRef<HTMLDialogElement>(null);
+  const [authorizationOpen, setAuthorizationOpen] = useState(false);
+  const authorizationDialog = useRef<HTMLDialogElement>(null);
+  const [accessCode, setAccessCode] = useState('');
+  const [authRegistered, setAuthRegistered] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const authRevision = useRef(0);
   const appliedSettings = useRef(initialSettings);
   const taskRunning = useRef(false);
   const [rates, setRates] = useState<{down:number|null;up:number|null}>({ down: null, up: null });
@@ -43,6 +51,7 @@ export default function App() {
   const size = (n: number) => n >= 1024 ** 3 ? `${number(n / 1024 ** 3, 2)} GB` : n >= 1024 ** 2 ? `${number(n / 1024 ** 2, 1)} MB` : `${number(n / 1024, 1)} KB`;
   const speed = (n: number|null) => n === null ? '—' : n >= 1024 ** 2 ? `${number(n / 1024 ** 2, 1)} MB/s` : `${number(n / 1024, 1)} KB/s`;
   const proxyUrl = useProxyUrl(settings, ready, setError);
+  const lineTests = useLineTests(status);
   const saving = useRef(false);
   const taskLabel=useRef<MessageKey|null>(null);
   const actualDark = preferences.theme === 'dark' || (preferences.theme === 'auto' && systemDark);
@@ -57,14 +66,17 @@ export default function App() {
   const locked = status.audit.running || auditPending !== null || cacheBusy || coreBusy || !!busy || !ready || isQuitting;
   const backendDisabled = !native || locked;
   const proxyActionBusy=proxyTest==='testing'||proxyTest==='saving';
-  const testPending=proxyActionBusy;
+  const testPending=proxyActionBusy||lineTests.pending!==null;
   function clearProxyTest(){const id=proxyTestId.current;proxyTestId.current=null;if(id)void invoke('cancel_proxy_test',{testId:id}).catch(()=>{});setProxyTest('idle');setTestedUrl(null);setTestNotice(null);}
   useEffect(()=>{clearProxyTest();},[settings.mode,status.running]);
   useEffect(()=>{if(proxyTest==='ready')clearProxyTest();},[status.settings.proxyUrl,status.settings.hasAuthentication]);
   useEffect(()=>()=>{const id=proxyTestId.current;if(id)void invoke('cancel_proxy_test',{testId:id}).catch(()=>{});},[]);
-  const connectionStatus=!ready?t('loading'):!status.running?t('stoppedNotice'):t(status.settings.mode==='direct'?'runningDirect':'runningProxy');
+  const lineName = (id: string) => status.accelerationLines.find(line=>line.id===id)?.name ?? id;
+  const selectedLineName = status.acceleration.lineId ? lineName(status.acceleration.lineId) : null;
+  const connectionStatus=!ready?t('loading'):!status.running?(status.acceleration.error?t(errorMessage({code:status.acceleration.error})):t('stoppedNotice')):status.settings.mode==='accelerate'?(status.authorization.state==='unavailable'?t('authorization.unavailable'):status.acceleration.error?t(errorMessage({code:status.acceleration.error})):`${t(`acceleration.${status.acceleration.state}`)}${selectedLineName?` · ${selectedLineName}`:''}`):t(status.settings.mode==='direct'?'runningDirect':'runningProxy');
+  const manualStatus = lineTests.result ? lineTests.result.state==='failed'?t('lineTestFailed'):lineTests.result.medianMs===null?'':`${lineTests.result.automatic?`${lineName(lineTests.result.lineId)} · `:''}${number(lineTests.result.medianMs,Number.isInteger(lineTests.result.medianMs)?0:1)} ms` : '';
   useEffect(()=>{if(!['loaded','loading','preview'].includes(notice.key))setFlash(notice);},[notice]);
-  const progressStatus=busy?t('busy',{action:t(busy)}):'';
+  const progressStatus=busy&&['connection','savingSettings'].includes(busy)&&['selecting','connecting'].includes(status.acceleration.state)?`${t(`acceleration.${status.acceleration.state}`)}${selectedLineName?` · ${selectedLineName}`:''}`:busy?t('busy',{action:t(busy)}):'';
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = actualDark ? 'dark' : 'light';
     document.documentElement.style.colorScheme = actualDark ? 'dark' : 'light';
@@ -148,6 +160,10 @@ export default function App() {
     const dialog = auditDialog.current;
     if (auditOpen) dialog?.showModal(); else dialog?.close();
   }, [auditOpen]);
+  useEffect(() => {
+    const dialog = authorizationDialog.current;
+    if (authorizationOpen) dialog?.showModal(); else dialog?.close();
+  }, [authorizationOpen]);
 
   async function changeCachePreferences(patch: Partial<CachePreferences>) {
     if (!native || cacheSaving.current || locked || proxyActionBusy) return;
@@ -183,10 +199,51 @@ export default function App() {
     } finally { auditAction.current = false; setAuditPending(null); }
   }
 
+  async function loadAuthorization(revision: number) {
+    setAuthLoading(true); setAuthLoaded(false);
+    try {
+      const value = await invoke<{registered:boolean;code:string|null}>('get_authorization_dialog');
+      if (revision !== authRevision.current) return;
+      setAuthRegistered(value.registered); setAccessCode(value.code ?? ''); setAuthLoaded(true);
+    } catch (e) { if (revision === authRevision.current) setError(errorMessage(e)); }
+    finally { if (revision === authRevision.current) setAuthLoading(false); }
+  }
+  function openAuthorization() {
+    if (!native || !status.authorization.configured) return;
+    const revision = ++authRevision.current;
+    setAccessCode(''); setAuthRegistered(false); setAuthLoaded(false); setError(null);
+    setAuthorizationOpen(true);
+    void loadAuthorization(revision);
+    void invoke('refresh_authorization').then(refresh).catch(e => {
+      if (revision === authRevision.current) setError(errorMessage(e));
+    });
+  }
+  function closeAuthorization() {
+    if (authLoading || busy) return;
+    authRevision.current++;
+    setAccessCode(''); setAuthLoaded(false); setAuthorizationOpen(false);
+  }
+  async function submitAuthorization() {
+    if (!authLoaded || authLoading || busy || status.running) return;
+    await task('authorization', async () => {
+      if (authRegistered) {
+        await invoke('unbind_authorization');
+        setAuthRegistered(false); setAccessCode('');
+      } else {
+        await invoke('activate_authorization', {code:accessCode.trim()});
+        await loadAuthorization(authRevision.current);
+      }
+    });
+  }
+
   async function saveNow(patch:Partial<Settings>, url:string|null=null):Promise<boolean> {
     if(saving.current || quitting.current)return false;
     if(!native){setSettings(previous=>({...previous,...patch}));return true;}
     const base=appliedSettings.current;const next={...base,...patch};
+    if (next.mode==='accelerate' && (!status.authorization.configured || status.authorization.state!=='active')) {
+      if (status.authorization.configured) openAuthorization();
+      return false;
+    }
     if(url===null && Object.entries(patch).every(([key,value])=>base[key as keyof Settings]===value))return true;
     saving.current=true;setBusy('savingSettings');setError(null);
     try {
@@ -226,9 +283,17 @@ export default function App() {
     }catch{if(proxyTestId.current===id){setProxyTest('idle');setTestedUrl(null);setTestNotice({key:'proxyPortFailure'});}}
     finally{if(proxyTestId.current===id)proxyTestId.current=null;}
   }
+  function testSelectedLine() {
+    if (testPending || locked || !native || !status.authorization.configured || status.accelerationLines.length===0) return;
+    const automatic = settings.lineSelection==='auto';
+    const lineId = automatic ? (status.running ? status.acceleration.lineId : null) : settings.selectedLineId;
+    if (automatic && status.running && !lineId) return;
+    setError(null); setFlash(null); setTestNotice(null);
+    void lineTests.test(lineId, automatic);
+  }
   function exitNow(){
     if(quitting.current||!native)return;
-    quitting.current=true;setIsQuitting(true);clearProxyTest();
+    quitting.current=true;setIsQuitting(true);clearProxyTest();lineTests.clear();
     void invoke('quit_app').catch(e=>{quitting.current=false;setIsQuitting(false);setError(errorMessage(e));});
   }
   async function task(label: MessageKey, work: () => Promise<unknown>) {
@@ -241,6 +306,7 @@ export default function App() {
     if(status.running){await invoke('stop_proxy');setNotice({key:'stoppedNotice'});return;}
     if(!await commitNumber('listenPort')||!await commitNumber('cacheLimitGb'))return;
     if(settings.mode==='proxy'&&proxyUrl.edited)return;
+    if(settings.mode==='accelerate'&&status.authorization.state!=='active'){openAuthorization();return;}
     await invoke('start_proxy');setNotice({key:'startedNotice'});
   }
   async function changePreferences(next: Preferences) {
@@ -253,6 +319,7 @@ export default function App() {
     finally { setPreferencesBusy(false); }
   }
   function menuAction(action: MenuAction) {
+    if (action === 'authorization') { openAuthorization(); return; }
     if (action === 'audit') { void auditOperation('start'); return; }
     if (action === 'clear') { void task('clearCache', async()=>{await invoke('clear_cache');setNotice({key:'cacheCleared'});});return; }
     if (action === 'quit') { exitNow(); return; }
@@ -271,13 +338,14 @@ export default function App() {
     <div className="content">
       <section className="running-row" aria-label="GBF POWER REBORN">
         <div className="brand"><img src={appLogo} alt=""/><strong>GBF POWER REBORN</strong></div>
-        <SettingsMenu cachePreferences={status.cachePreferences} cacheBusy={cacheBusy} auditRunning={status.audit.running} onCachePreference={changeCachePreferences} quitting={isQuitting} cacheUsage={size(status.cacheBytes)} onCacheLimit={value => setSettings(s=>({...s,cacheLimitGb:value}))} onCommitCacheLimit={()=>void commitNumber('cacheLimitGb')} t={t} preferences={preferences} certificate={status.certificate} settings={settings} running={status.running} busy={locked || proxyActionBusy} preferencesBusy={preferencesBusy} ready={ready} native={native} onPreference={changePreferences} onListenPort={value => setSettings(s=>({...s,listenPort:value}))} onCommitListenPort={()=>void commitNumber('listenPort')} onCopyPac={() => void task('copyPac', async () => { await writeText(status.pacUrl); setNotice({ key: 'copied' }); setFlash({ key: 'copied' }); })} onAction={menuAction}/>
+        <SettingsMenu authorizationConfigured={status.authorization.configured} authorizationState={t(`authorization.${status.authorization.state}`)} cachePreferences={status.cachePreferences} cacheBusy={cacheBusy} auditRunning={status.audit.running} onCachePreference={changeCachePreferences} quitting={isQuitting} cacheUsage={size(status.cacheBytes)} onCacheLimit={value => setSettings(s=>({...s,cacheLimitGb:value}))} onCommitCacheLimit={()=>void commitNumber('cacheLimitGb')} t={t} preferences={preferences} certificate={status.certificate} settings={settings} running={status.running} busy={locked || proxyActionBusy} preferencesBusy={preferencesBusy} ready={ready} native={native} onPreference={changePreferences} onListenPort={value => setSettings(s=>({...s,listenPort:value}))} onCommitListenPort={()=>void commitNumber('listenPort')} onCopyPac={() => void task('copyPac', async () => { await writeText(status.pacUrl); setNotice({ key: 'copied' }); setFlash({ key: 'copied' }); })} onAction={menuAction}/>
       </section>
 
       <section className="connection-section">
         <div className="form-row connection-main">
-          <label className="inline-field mode-field"><span>{t('mode')}</span><select aria-label={t('mode')} value={settings.mode} disabled={locked||testPending||isQuitting} onChange={e => field('mode', e.target.value as Settings['mode'])}><option value="direct">{t('direct')}</option><option value="proxy">{t('proxy')}</option><option value="accelerate" disabled>{t('accelerateUnavailable')}</option></select></label>
+          <label className="inline-field mode-field"><span>{t('mode')}</span><select aria-label={t('mode')} value={settings.mode} disabled={locked||testPending||isQuitting} onChange={e => field('mode', e.target.value as Settings['mode'])}><option value="direct">{t('direct')}</option><option value="proxy">{t('proxy')}</option><option value="accelerate" disabled={!status.authorization.configured}>{status.authorization.configured?t('accelerate'):t('accelerateUnavailable')}</option></select></label>
           {settings.mode === 'proxy' && <div className="inline-field host-field"><span>URL</span><input aria-label={t('proxyUrl')} type="text" value={proxyUrl.value} disabled={locked||proxyActionBusy||isQuitting} onChange={e=>{clearProxyTest();proxyUrl.change(e.target.value);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void proxyAction();}}} spellCheck={false} autoComplete="off" placeholder={proxyUrl.loading?t('loadingProxy'):'socks5://127.0.0.1:7890'}/><button className="connection-test" disabled={backendDisabled||testPending||proxyUrl.unavailable||isQuitting} aria-busy={proxyActionBusy} onClick={()=>void proxyAction()}>{t(proxyTest==='ready'||proxyTest==='saving'?'saveProxy':'lineTest')}</button></div>}
+          {settings.mode==='accelerate'&&status.authorization.configured&&<div className="inline-field line-field"><span>{t('line')}</span><select aria-label={t('line')} value={settings.lineSelection==='auto'?'auto:':settings.selectedLineId} disabled={locked||testPending||isQuitting} onChange={e=>void saveNow(e.target.value==='auto:'?{lineSelection:'auto'}:{lineSelection:'manual',selectedLineId:e.target.value})}><option value="auto:">{status.running&&selectedLineName?t('automaticLineNamed',{name:selectedLineName}):t('automaticLine')}</option>{settings.lineSelection==='manual'&&!status.accelerationLines.some(line=>line.id===settings.selectedLineId)&&<option value={settings.selectedLineId} disabled>{t('lineUnavailable')}</option>}{status.accelerationLines.map(line=><option key={line.id} value={line.id}>{line.name}</option>)}</select><button className="connection-test" aria-label={t('lineTest')} aria-busy={lineTests.pending!==null} disabled={backendDisabled||testPending||status.accelerationLines.length===0||(settings.lineSelection==='auto'&&status.running&&!status.acceleration.lineId)} onClick={testSelectedLine}>{t('lineTest')}</button></div>}
 
         </div>
 
@@ -293,7 +361,7 @@ export default function App() {
 
       <section className="statistics-section">
         <div className="statistics">
-          <Metric label={t('routeLatency')} value="—"/>
+          <Metric label={t('routeLatency')} value={status.running&&status.settings.mode==='accelerate'&&status.acceleration.state==='connected'&&status.metrics.network.lineLatencyMs!==null?`${number(status.metrics.network.lineLatencyMs)} ms`:'—'}/>
           <Metric label={t('requests')} value={number(status.metrics.requests)}/>
           <div className="cache-summary"><Metric label={t('downloads')} value={number(status.metrics.downloads)}/><Metric label={t('hitRate')} value={status.metrics.hitRate===null?'—':`${number(status.metrics.hitRate,1)}%`}/></div>
           <div className="metric traffic"><span>{t('traffic')}</span><strong className="numeric"><span>↓ {speed(rates.down)}</span><span>↑ {speed(rates.up)}</span></strong></div>
@@ -316,12 +384,21 @@ export default function App() {
         <label className="checkbox"><input type="checkbox" checked={settings.autostart} disabled={locked} onChange={e => field('autostart', e.target.checked)}/><span>{t('autostart')}</span></label>
       </section>
     </div>
-      <footer className="statusbar"><span role="status" className={error ? 'error' : ''}>{error ? t(error) : isQuitting ? t('quitting') : busy ? progressStatus : testNotice ? t(testNotice.key,testNotice.args) : (flash ? t(flash.key,flash.args) : connectionStatus)}</span><span>v{version}</span></footer>
+      <footer className="statusbar"><span role="status" className={error ? 'error' : ''}>{error ? t(error) : isQuitting ? t('quitting') : busy ? progressStatus : lineTests.pending!==null?t('testingConnection') : testNotice ? t(testNotice.key,testNotice.args) : manualStatus || (flash ? t(flash.key,flash.args) : connectionStatus)}</span><span>v{version}</span></footer>
     <dialog ref={auditDialog} className="audit-dialog" aria-label={t('auditTitle')} onCancel={event => { event.preventDefault(); closeAudit(); }}>
       <div className="dialog-heading"><h2>{t('auditTitle')}</h2><button type="button" className="text-button" aria-label={t('closeDialog')} disabled={status.audit.running || auditPending !== null} onClick={closeAudit}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="2"/></svg></button></div>
       <p role="status">{t(auditPending === 'start' ? 'auditStarting' : auditPending === 'cancel' ? 'auditCancelling' : status.audit.running ? 'auditRunning' : status.audit.cancelled ? 'auditCancelled' : auditError ? 'auditFailed' : status.audit.failed > 0 ? 'auditIssues' : 'auditDone')}<br/>{t('auditCounts', { checked: number(status.audit.checked), repaired: number(status.audit.repaired), failed: number(status.audit.failed) })}</p>
       {auditError && <p role="alert" className="error">{t(auditError)}</p>}
       <div className="dialog-actions"><button type="button" data-action={status.audit.running || auditPending !== null ? "cancel-audit" : "close-audit"} disabled={auditPending !== null || isQuitting} onClick={() => { if (status.audit.running) void auditOperation('cancel'); else closeAudit(); }}>{t(status.audit.running || auditPending !== null ? 'cancel' : 'closeDialog')}</button></div>
+    </dialog>
+    <dialog ref={authorizationDialog} className="authorization-dialog" aria-label={t('authorization')} onCancel={event => {event.preventDefault();closeAuthorization();}}>
+      <div className="dialog-heading"><h2>{t('authorization')}</h2><button type="button" className="text-button" aria-label={t('closeDialog')} disabled={authLoading||!!busy} onClick={closeAuthorization}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="2"/></svg></button></div>
+      <div className="auth-fields">
+        <div className="authorization-validity"><span>{t('authorization')}</span><strong>{t(`authorization.${status.authorization.state}`)}</strong></div>
+        <label>{t('accessCode')}<input aria-label={t('accessCode')} type="password" autoComplete="off" spellCheck={false} value={accessCode} readOnly={authRegistered} disabled={!authLoaded||authLoading||(!authRegistered&&(status.running||!!busy))} onChange={event=>setAccessCode(event.target.value)}/></label>
+        <p role={error?'alert':'status'} className={error?'error':''}>{error?t(error):authLoading?t('loading'):status.running?t('stopToEdit'):t(`authorization.${status.authorization.state}`)}</p>
+        <div className="dialog-actions"><button type="button" className="primary" disabled={!authLoaded||authLoading||status.running||!!busy||(!authRegistered&&!accessCode.trim())} onClick={()=>void submitAuthorization()}>{t(authRegistered?'unbindDevice':'activateAuthorization')}</button></div>
+      </div>
     </dialog>
   </main>;
 }

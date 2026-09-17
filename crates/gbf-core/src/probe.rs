@@ -77,11 +77,30 @@ pub async fn batch(client: &reqwest::Client, url: &str) -> Batch {
     Batch { samples }
 }
 
-pub async fn monitor(context: std::sync::Arc<crate::proxy::ContextState>, target: usize) {
+pub type SessionReader = Box<dyn Fn() -> Option<tokio_util::sync::CancellationToken> + Send + Sync>;
+pub async fn monitor(
+    context: std::sync::Arc<crate::proxy::ContextState>,
+    target: usize,
+    session: Option<SessionReader>,
+    tcp_target: Option<(String, u16)>,
+) {
+    use tokio_util::sync::CancellationToken;
     let url = if target == 2 { STEAM } else { GAME };
     loop {
         context.metrics.reset_probe(target);
-        let Ok(client) = crate::routing::client(&context.settings, "", false) else {
+        let transport = if let Some(read) = &session {
+            match read() {
+                Some(token) if !token.is_cancelled() => token,
+                _ => {
+                    tokio::select! { _ = context.cancel.cancelled() => return, _ = tokio::time::sleep(Duration::from_millis(100)) => {} }
+                    continue;
+                }
+            }
+        } else {
+            CancellationToken::new()
+        };
+        let Ok(client) = crate::routing::client(&context.settings, &context.password, target == 0)
+        else {
             return;
         };
         let mut initial = true;
@@ -94,6 +113,7 @@ pub async fn monitor(context: std::sync::Arc<crate::proxy::ContextState>, target
         loop {
             tokio::select! { biased;
                 _ = context.cancel.cancelled() => return,
+                _ = transport.cancelled() => break,
                 _ = interval.tick() => {}
             }
             let wall = std::time::SystemTime::now();
@@ -108,22 +128,40 @@ pub async fn monitor(context: std::sync::Arc<crate::proxy::ContextState>, target
             last_wall = wall;
             let result = tokio::select! { biased;
                 _ = context.cancel.cancelled() => return,
-                result = head(&client, url, DEADLINE) => result
+                _ = transport.cancelled() => break,
+                result = async {
+                    if let Some((host, port)) = &tcp_target {
+                        let addresses = crate::tcp_probe::resolve(host, *port).await;
+                        let sample = crate::tcp_probe::sample(&addresses).await;
+                        Observation { elapsed_ms: sample.latency_ms().unwrap_or(0), sample, http_status: None }
+                    } else { head(&client, url, DEADLINE).await }
+                } => result
             };
             let outcome = (std::mem::discriminant(&result.sample), result.http_status);
             if context.cancel.is_cancelled() {
                 return;
             }
+            if transport.is_cancelled() {
+                break;
+            }
             if last_outcome != Some(outcome) || last_log.elapsed() >= Duration::from_secs(60) {
-                result.log(if initial {
-                    "monitor_initial"
+                if tcp_target.is_some() {
+                    tracing::info!(
+                        elapsed_ms = result.elapsed_ms,
+                        connected = matches!(result.sample, ProbeSample::Success(_)),
+                        "line_tcp_probe"
+                    );
                 } else {
-                    "monitor_subsequent"
-                });
+                    result.log(if initial {
+                        "monitor_initial"
+                    } else {
+                        "monitor_subsequent"
+                    });
+                }
                 last_outcome = Some(outcome);
                 last_log = Instant::now();
             }
-            if !initial {
+            if !initial || tcp_target.is_some() {
                 context.metrics.record_probe(target, result.sample);
             }
             initial = false;

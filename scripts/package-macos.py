@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from client_profile import profile_input, verify_binary_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / 'artifacts/macos'
@@ -44,18 +45,20 @@ def source_inventory():
     return {name: digest(ROOT / name) for name in sorted(set(names)) if name and (ROOT / name).is_file()}
 
 
-def verify_app(app):
+def verify_app(app, profile_tag):
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert info['CFBundleIdentifier'] == 'cc.lzsony.gbf-power-reborn'
-    assert info['CFBundleShortVersionString'] == '0.3.0'
+    assert info['CFBundleShortVersionString'] == '0.4.0'
     assert info['LSMinimumSystemVersion'] == '13.0'
     binary = app / 'Contents/MacOS' / info['CFBundleExecutable']
     assert run('lipo', '-archs', str(binary), capture_output=True, text=True).stdout.strip() == 'arm64'
     assert MARKER not in binary.read_bytes(), 'Refusing internal-test binary'
+    verify_binary_profile(binary.read_bytes(), profile_tag)
     for name in ['LICENSE', 'OFL-NotoSansTC.txt', 'THIRD_PARTY_NOTICES.md', 'inventory.json']:
         assert list((app / 'Contents/Resources').rglob(name)), 'Missing license resource: ' + name
     for pattern in ['config.json', 'control.json', '*.key', '*.pem']:
         assert not list(app.rglob(pattern)), 'Runtime data in bundle: ' + pattern
+    assert not list(app.rglob('*.local.json')), 'Local build config in bundle'
     run('codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app))
     signature = run('codesign', '-dv', str(app), capture_output=True, text=True).stderr
     assert 'Signature=adhoc' in signature, 'Expected ad-hoc signature'
@@ -85,6 +88,7 @@ def main():
     with os.fdopen(fd, 'w') as stream:
         stream.write(str(os.getpid()))
     try:
+        profile = profile_input()
         run('npm', 'ci')
         run('python3', 'scripts/collect-licenses.py')
         sources = source_inventory()
@@ -104,10 +108,11 @@ def main():
             override = {'bundle': {'resources': resources, 'macOS': {'signingIdentity': '-'}}}
             run('npm', 'run', 'tauri', '--', 'build', '--bundles', 'app,dmg', '--config', json.dumps(override), env=env)
             assert source_inventory() == sources, 'Source files changed during packaging; rebuild required'
+            assert profile_input() == profile, 'Public client build input changed during packaging; rebuild required'
             app = bundle / 'macos/GBF POWER REBORN.app'
             dmgs = list((bundle / 'dmg').glob('*.dmg'))
             assert len(dmgs) == 1, 'Expected exactly one fresh DMG'
-            contents = verify_app(app)
+            contents = verify_app(app, profile['tag'])
             run('hdiutil', 'verify', str(dmgs[0]))
             mount = stage / 'mounted'
             mount.mkdir()
@@ -120,10 +125,11 @@ def main():
                 if attached:
                     run('hdiutil', 'detach', str(mount))
             shutil.copytree(app, stage / app.name, symlinks=True)
-            dmg_name = 'GBF-POWER-REBORN-0.3.0-macos-arm64.dmg'
+            dmg_name = 'GBF-POWER-REBORN-0.4.0-macos-arm64.dmg'
             shutil.copy2(dmgs[0], stage / dmg_name)
             manifest = {'baseCommit': run('git', 'rev-parse', 'HEAD', capture_output=True, text=True).stdout.strip(),
-                        'version': '0.3.0', 'identifier': 'cc.lzsony.gbf-power-reborn',
+                        'version': '0.4.0', 'identifier': 'cc.lzsony.gbf-power-reborn',
+                        'clientProfile': {key: profile[key] for key in ('tag', 'deploymentId', 'url') if key in profile},
                         'platform': platform.platform(), 'signature': 'ad-hoc', 'notarized': False,
                         'sourceFiles': sources, 'files': contents, 'dmgSha256': digest(stage / dmg_name)}
             (stage / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -134,7 +140,7 @@ def main():
                     previous.mkdir(exist_ok=True)
                     (OUTPUT / name).rename(previous / name)
                 (stage / name).rename(OUTPUT / name)
-            assert verify_app(OUTPUT / app.name) == contents
+            assert verify_app(OUTPUT / app.name, profile['tag']) == contents
             print('PASS: verified App/DMG in ' + str(OUTPUT))
     finally:
         lock.unlink(missing_ok=True)

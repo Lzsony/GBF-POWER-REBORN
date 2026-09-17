@@ -1,3 +1,7 @@
+pub mod acceleration;
+pub mod authorization;
+pub mod selection;
+pub use authorization::EmbeddedPublicProfile;
 mod background;
 pub mod cache;
 pub mod certificate;

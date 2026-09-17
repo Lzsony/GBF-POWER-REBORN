@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import type { CachePreferences, CertificateStatus, Preferences, Settings } from './types';
 import type { MessageKey } from './i18n';
 
-export type MenuAction = 'install' | 'openCertificate' | 'check' | 'remove' | 'clear' | 'data' | 'quit' | 'audit';
+export type MenuAction = 'install' | 'openCertificate' | 'check' | 'remove' | 'clear' | 'data' | 'quit' | 'audit' | 'authorization';
 type Props = {
   quitting:boolean;
+  authorizationConfigured: boolean; authorizationState: string;
   onCommitListenPort:()=>void;onCommitCacheLimit:()=>void;
   cachePreferences: CachePreferences; cacheBusy: boolean; auditRunning: boolean;
   onCachePreference: (patch: Partial<CachePreferences>) => Promise<void>;
@@ -152,18 +153,19 @@ export default function SettingsMenu(props: Props) {
       <button type="button" ref={certificateTrigger} role="menuitem" tabIndex={-1} data-row={0} className="menu-item" aria-haspopup="menu" aria-expanded={subOpen && subKind === 'certificate'} aria-controls="certificate-menu" onPointerEnter={() => hoverSub('certificate')} onClick={() => openSub(true)}><span>{t('manageCertificate')}</span><span aria-hidden="true">›</span></button>
       <button type="button" ref={cacheTrigger} role="menuitem" tabIndex={-1} data-row={1} data-action="cache-menu" className="menu-item" aria-haspopup="menu" aria-expanded={subOpen && subKind === 'cache'} aria-controls="cache-menu" onPointerEnter={() => hoverSub('cache')} onClick={() => openSub(true, 'cache')}><span>{t('manageCache')}</span><span aria-hidden="true">›</span></button>
       {item(2, 'openDirectory', 'data')}
+      {props.authorizationConfigured && <button type="button" role="menuitem" tabIndex={-1} data-row={3} className="menu-item" disabled={disabled} onPointerEnter={scheduleSubClose} onClick={()=>act('authorization')}><span>{t('authorization')}</span><span className="menu-authorization">{props.authorizationState}</span></button>}
       <div className="menu-separator" role="separator"/>
-      <label className="menu-port"><span>{t('localPort')}</span><input data-row={3} aria-label={t('localPort')} type="number" min="1024" max="65535" value={settings.listenPort} disabled={disabled || running} onChange={event => onListenPort(Number(event.target.value))} onBlur={props.onCommitListenPort} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();props.onCommitListenPort();}}}/></label>
-      <button type="button" role="menuitem" tabIndex={-1} data-row={4} className="menu-item menu-pac" aria-label={t('copyPac')} disabled={disabled} onPointerEnter={scheduleSubClose} onClick={onCopyPac}><span>{t('copyPac')}</span></button>
+      <label className="menu-port"><span>{t('localPort')}</span><input data-row={4} aria-label={t('localPort')} type="number" min="1024" max="65535" value={settings.listenPort} disabled={disabled || running} onChange={event => onListenPort(Number(event.target.value))} onBlur={props.onCommitListenPort} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();props.onCommitListenPort();}}}/></label>
+      <button type="button" role="menuitem" tabIndex={-1} data-row={5} className="menu-item menu-pac" aria-label={t('copyPac')} disabled={disabled} onPointerEnter={scheduleSubClose} onClick={onCopyPac}><span>{t('copyPac')}</span></button>
       <div className="menu-separator" role="separator"/>
       <div className="menu-options language-options" role="group" aria-label={t('language')} onPointerEnter={scheduleSubClose}>
-        {(['zh-CN', 'zh-TW', 'ja', 'en'] as const).map((language, index) => <button type="button" role="menuitemradio" data-row={5} tabIndex={-1} aria-checked={preferences.language === language} aria-label={['简体', '繁體', '日本語', 'English'][index]} lang={language} key={language} aria-disabled={preferencesBusy || !ready || props.quitting} onClick={() => { if (!preferencesBusy && ready && !props.quitting) void onPreference({ ...preferences, language }); }}>{['简体', '繁體', '日本語', 'English'][index]}</button>)}
+        {(['zh-CN', 'zh-TW', 'ja', 'en'] as const).map((language, index) => <button type="button" role="menuitemradio" data-row={6} tabIndex={-1} aria-checked={preferences.language === language} aria-label={['简体', '繁體', '日本語', 'English'][index]} lang={language} key={language} aria-disabled={preferencesBusy || !ready || props.quitting} onClick={() => { if (!preferencesBusy && ready && !props.quitting) void onPreference({ ...preferences, language }); }}>{['简体', '繁體', '日本語', 'English'][index]}</button>)}
       </div>
       <div className="menu-options theme-options" role="group" aria-label={t('appearance')} onPointerEnter={scheduleSubClose}>
-        {(['light', 'dark', 'auto'] as const).map(theme => <button type="button" role="menuitemradio" data-row={6} tabIndex={-1} aria-checked={preferences.theme === theme} aria-label={t(theme)} key={theme} aria-disabled={preferencesBusy || !ready || props.quitting} onClick={() => { if (!preferencesBusy && ready && !props.quitting) void onPreference({ ...preferences, theme }); }}><ThemeIcon theme={theme}/></button>)}
+        {(['light', 'dark', 'auto'] as const).map(theme => <button type="button" role="menuitemradio" data-row={7} tabIndex={-1} aria-checked={preferences.theme === theme} aria-label={t(theme)} key={theme} aria-disabled={preferencesBusy || !ready || props.quitting} onClick={() => { if (!preferencesBusy && ready && !props.quitting) void onPreference({ ...preferences, theme }); }}><ThemeIcon theme={theme}/></button>)}
       </div>
       <div className="menu-separator" role="separator"/>
-      <button type="button" role="menuitem" tabIndex={-1} data-row={7} data-action="quit" className="menu-item" disabled={!native||props.quitting} onClick={()=>act('quit')}>{t('quit')}</button>
+      <button type="button" role="menuitem" tabIndex={-1} data-row={8} data-action="quit" className="menu-item" disabled={!native||props.quitting} onClick={()=>act('quit')}>{t('quit')}</button>
     </div>}
     {open && subOpen && <div ref={subPanel} id={subKind === 'certificate' ? 'certificate-menu' : 'cache-menu'} className="menu-panel certificate-menu" role="menu" aria-label={t(subKind === 'certificate' ? 'manageCertificate' : 'manageCache')} data-side={subPosition.side} onPointerEnter={cancelSubClose} style={{ left: subPosition.left, top: subPosition.top }} onKeyDown={event => keys(event, true)}>
       {inlineSub && <><button type="button" role="menuitem" tabIndex={-1} className="menu-item menu-back" aria-label={t('backToMenu')} onClick={back}><span aria-hidden="true">‹</span><span>{t(subKind === 'certificate' ? 'manageCertificate' : 'manageCache')}</span></button><div className="menu-separator" role="separator"/></>}

@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
+from client_profile import profile_input, verify_binary_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / 'artifacts/windows'
@@ -51,7 +52,7 @@ def verify_version(path):
     fixed = struct.unpack('<13I', ctypes.string_at(value, 52))
     assert fixed[0] == 0xFEEF04BD, 'Invalid fixed version resource'
     for high, low in [(fixed[2], fixed[3]), (fixed[4], fixed[5])]:
-        assert (high >> 16, high & 0xffff, low >> 16, low & 0xffff) == (0, 3, 0, 0), 'Unexpected executable version'
+        assert (high >> 16, high & 0xffff, low >> 16, low & 0xffff) == (0, 4, 0, 0), 'Unexpected executable version'
     value, length = query('\\VarFileInfo\\Translation')
     assert length >= 4
     language, codepage = struct.unpack('<HH', ctypes.string_at(value, 4))
@@ -63,7 +64,10 @@ def main():
     if platform.system() != 'Windows':
         raise SystemExit('Run after the Windows native build')
     binary = ROOT / 'target/release/gbf-power-reborn.exe'
-    verify_executable(binary.read_bytes())
+    profile = profile_input()
+    payload = binary.read_bytes()
+    verify_executable(payload)
+    verify_binary_profile(payload, profile['tag'])
     verify_version(binary)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.package-', dir=OUTPUT) as temporary:
@@ -75,10 +79,10 @@ def main():
             shutil.copyfile(ROOT / name, licenses / name)
         shutil.copyfile(ROOT / 'docs/OFL-NotoSansTC.txt', licenses / 'OFL-NotoSansTC.txt')
         subprocess.run(['python', str(ROOT / 'scripts/collect-licenses.py'), '--output', str(licenses / 'dependencies')], cwd=ROOT, check=True)
-        (stage / 'README.txt').write_text('GBF POWER REBORN 0.3.0\nWindows x64 CI artifact. Requires installed Microsoft Edge WebView2 Runtime.\nNot Authenticode signed. Native UI, certificate trust and real gameplay require device acceptance.\n', encoding='utf-8')
+        (stage / 'README.txt').write_text('GBF POWER REBORN 0.4.0\nWindows x64 CI artifact. Requires installed Microsoft Edge WebView2 Runtime.\nNot Authenticode signed. Native UI, certificate trust and real gameplay require device acceptance.\n', encoding='utf-8')
         files = {str(p.relative_to(stage)).replace('\\', '/'): hashlib.sha256(p.read_bytes()).hexdigest()
                  for p in sorted(stage.rglob('*')) if p.is_file()}
-        manifest = {'version': '0.3.0', 'architecture': 'x64', 'signed': False, 'files': files}
+        manifest = {'version': '0.4.0', 'architecture': 'x64', 'signed': False, 'clientProfile': {key: profile[key] for key in ('tag', 'deploymentId', 'url') if key in profile}, 'files': files}
         (stage / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
         pending = stage / 'delivery.zip'
         with zipfile.ZipFile(pending, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
@@ -90,7 +94,7 @@ def main():
             for name, expected in files.items():
                 assert hashlib.sha256(archive.read(name)).hexdigest() == expected, name
             verify_executable(archive.read('GBF POWER REBORN.exe'))
-        output = OUTPUT / 'GBF-POWER-REBORN-0.3.0-windows-x64.zip'
+        output = OUTPUT / 'GBF-POWER-REBORN-0.4.0-windows-x64.zip'
         pending.replace(output)
         (OUTPUT / (output.name + '.sha256')).write_text(hashlib.sha256(output.read_bytes()).hexdigest() + '  ' + output.name + '\n')
         print('PASS: Windows x64 artifact and manifest verified')

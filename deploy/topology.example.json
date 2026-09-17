@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "deploymentId": "my-deployment",
+  "releaseRoot": "../artifacts/server",
+  "outputDir": "../artifacts/deployment",
+  "control": {
+    "sshTarget": "control.example.invalid",
+    "publicUrl": "https://control.example.invalid:8443",
+    "port": 8443,
+    "managed": true
+  },
+  "gateways": [
+    {
+      "sshTarget": "gateway.example.invalid",
+      "id": "gateway-1",
+      "name": "Gateway 1",
+      "publicHost": "gateway.example.invalid",
+      "port": 2222
+    }
+  ]
+}

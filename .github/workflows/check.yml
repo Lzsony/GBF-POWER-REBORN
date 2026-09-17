@@ -1,4 +1,4 @@
-name: Windows build and test
+name: Build and test
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-${{ github.workflow }}-${{ github.ref }}
+  group: checks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,6 +41,12 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run isolated core and desktop tests
         run: cargo test --workspace --locked
+      - name: Validate custom client build profile
+        env:
+          GPR_CLIENT_CONFIG: tests/fixtures/client-profile.example.json
+        run: cargo check -p gbf-power-reborn --locked
+      - name: Check public profile inputs
+        run: python -m unittest discover -s tests -p test_client_profile.py
       - name: Validate PAC rules
         run: npm run test:pac
       - name: Install Chromium
@@ -60,3 +66,26 @@ jobs:
             artifacts/windows/*.sha256
           if-no-files-found: error
           retention-days: 14
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Test server and race-sensitive leases
+        working-directory: server
+        run: |
+          go test ./...
+          go test -race ./...
+          go vet ./...
+      - name: Validate deployment planner
+        run: |
+          python3 -m unittest discover -s deploy -p 'test_*.py'
+          python3 -m unittest discover -s tests -p 'test_client_profile.py'
+      - name: Build and inspect Linux server packages
+        run: |
+          python3 scripts/build-server.py --go go --arch all
+          test "$(./artifacts/server/gbf-server-0.4.0-linux-amd64/reborn version)" = "0.4.0"

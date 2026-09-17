@@ -2,6 +2,7 @@
 use crate::metrics::ProbeSample;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{net::TcpStream, time::Instant};
+use tokio_util::sync::CancellationToken;
 
 pub(crate) async fn resolve(host: &str, port: u16) -> Vec<SocketAddr> {
     match tokio::time::timeout(
@@ -29,4 +30,16 @@ pub(crate) async fn sample(addresses: &[SocketAddr]) -> ProbeSample {
         }
     }
     ProbeSample::Failure
+}
+pub(crate) async fn batch(
+    host: &str,
+    port: u16,
+    cancel: &CancellationToken,
+) -> crate::probe::Batch {
+    let mut samples = Vec::new();
+    let addresses = tokio::select! { _=cancel.cancelled()=>return crate::probe::Batch{samples}, a=resolve(host,port)=>a };
+    for _ in 0..3 {
+        tokio::select! { _=cancel.cancelled()=>break, value=sample(&addresses)=>samples.push(value) }
+    }
+    crate::probe::Batch { samples }
 }

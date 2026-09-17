@@ -11,7 +11,9 @@
     const until = async (predicate, label, timeout = 10000) => {
       const end = Date.now() + timeout;
       while (Date.now() < end) { if (await predicate()) return; await sleep(50); }
-      throw new Error(`Timeout: ${label}; status=${document.querySelector('.statusbar')?.textContent}; errors=${JSON.stringify(bootErrors)}`);
+      const audit = await invoke('get_status').then(value => value.audit).catch(() => null);
+      const native = await invoke('get_native_control').then(value => value.state).catch(() => null);
+      throw new Error(`Timeout: ${label}; status=${document.querySelector('.statusbar')?.textContent}; audit=${JSON.stringify(audit)}; native=${JSON.stringify(native)}; dialog=${document.querySelector('dialog[open]')?.textContent?.slice(0, 240)}; errors=${JSON.stringify(bootErrors)}`);
     };
     const checks = [];
     try {

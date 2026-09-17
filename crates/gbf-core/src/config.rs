@@ -8,14 +8,25 @@ use std::path::Path;
 pub enum Mode {
     #[default]
     Direct,
+    Accelerate,
     Http,
     Socks5,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum LineSelection {
+    Manual,
+    #[default]
+    Auto,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
     pub mode: Mode,
+    pub selected_line_id: String,
+    pub line_selection: LineSelection,
     pub proxy_protocol: crate::connection::Protocol,
     pub upstream_host: String,
     pub upstream_port: u16,
@@ -33,6 +44,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             mode: Mode::Direct,
+            selected_line_id: String::new(),
+            line_selection: LineSelection::Auto,
             proxy_protocol: crate::connection::Protocol::Http,
             upstream_host: "127.0.0.1".into(),
             upstream_port: 7890,

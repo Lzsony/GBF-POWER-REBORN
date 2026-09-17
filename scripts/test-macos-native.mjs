@@ -55,6 +55,8 @@ async function run(stage) {
   assert.equal(final.passed, true, JSON.stringify(final));
   const exit = await Promise.race([ended, sleep(5000).then(() => null)]);
   assert.ok(exit, 'Application did not quit'); assert.equal(exit[0], 0);
+  // The opt-in audit hold belongs to this stage, not the persisted app data.
+  await rm(path.join(data, '.internal-audit-hold'), { force: true });
   assert.match(final.userAgent, /AppleWebKit/);
   summaries.push({ stage, ...final, singleInstance: single });
   console.log(JSON.stringify(summaries.at(-1)));

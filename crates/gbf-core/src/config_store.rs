@@ -12,6 +12,8 @@ static STORE: Mutex<()> = Mutex::new(());
 pub struct Document {
     pub schema_version: u32,
     pub settings: Settings,
+    #[serde(default)]
+    pub authorizations: std::collections::BTreeMap<String, crate::authorization::AuthConfig>,
 }
 
 impl Document {
@@ -20,6 +22,9 @@ impl Document {
             bail!("Unsupported config schemaVersion: {}", self.schema_version);
         }
         self.settings.validate()?;
+        for (id, auth) in &self.authorizations {
+            auth.validate_for(id)?;
+        }
         Ok(())
     }
 }
@@ -71,6 +76,7 @@ fn load_unlocked(root: &Path) -> Result<Document> {
     let document = Document {
         schema_version: 1,
         settings: Settings::default(),
+        authorizations: Default::default(),
     };
     document.validate()?;
     atomic_write(&path, &serde_json::to_vec_pretty(&document)?)?;

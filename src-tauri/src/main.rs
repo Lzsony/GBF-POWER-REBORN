@@ -12,6 +12,9 @@ mod tray_control;
 mod window_layout;
 #[cfg(windows)]
 mod windows_runtime;
+mod embedded_public_profile {
+    include!(concat!(env!("OUT_DIR"), "/embedded_public_profile.rs"));
+}
 use gbf_core::{
     error::{CommandError, ErrorCode},
     preferences::Preferences,
@@ -51,6 +54,10 @@ async fn get_status(core: Core<'_>) -> CommandResult<Status> {
     #[cfg(feature = "internal-test")]
     internal_test::record_status();
     core.status().await.map_err(error)
+}
+#[tauri::command]
+fn get_build_profile_tag() -> &'static str {
+    embedded_public_profile::BUILD_PROFILE_TAG
 }
 #[tauri::command]
 fn get_native_control(app: tauri::AppHandle) -> tray_control::Snapshot {
@@ -170,6 +177,26 @@ async fn cancel_proxy_test(core: Core<'_>, test_id: String) -> CommandResult<()>
     Ok(())
 }
 #[tauri::command]
+async fn test_line(
+    core: Core<'_>,
+    test_id: String,
+    line_id: String,
+) -> CommandResult<gbf_core::runtime::LineTestResult> {
+    Ok(core.inner().test_line(test_id, line_id).await)
+}
+#[tauri::command]
+async fn test_auto_lines(
+    core: Core<'_>,
+    test_id: String,
+) -> CommandResult<gbf_core::runtime::LineTestResult> {
+    Ok(core.inner().test_auto_lines(test_id).await)
+}
+#[tauri::command]
+async fn cancel_line_test(core: Core<'_>, test_id: String) -> CommandResult<()> {
+    core.cancel_line_test(Some(&test_id)).await;
+    Ok(())
+}
+#[tauri::command]
 async fn test_connection(
     core: Core<'_>,
     input: ConnectionInput,
@@ -177,6 +204,35 @@ async fn test_connection(
     let (settings, password) =
         apply_input(&core.settings.read().unwrap(), &input).map_err(error)?;
     core.probe(settings, password).await.map_err(error)
+}
+#[tauri::command]
+async fn get_authorization_dialog(
+    core: Core<'_>,
+) -> CommandResult<gbf_core::authorization::DialogView> {
+    core.authorization.dialog().map_err(error)
+}
+#[tauri::command]
+async fn activate_authorization(core: Core<'_>, code: Option<String>) -> CommandResult<()> {
+    core.activate_authorization(code).await.map_err(error)
+}
+#[tauri::command]
+async fn unbind_authorization(core: Core<'_>) -> CommandResult<()> {
+    core.unbind_authorization().await.map_err(error)
+}
+#[tauri::command]
+async fn refresh_authorization(core: Core<'_>) -> CommandResult<gbf_core::authorization::View> {
+    match core.authorization_poll().await {
+        Ok(()) => {}
+        Err(e)
+            if matches!(
+                e.downcast_ref::<ErrorCode>(),
+                Some(
+                    ErrorCode::AuthRequired | ErrorCode::AuthNotConfigured | ErrorCode::AuthRevoked
+                )
+            ) => {}
+        Err(e) => return Err(error(e)),
+    }
+    Ok(core.authorization.view())
 }
 #[tauri::command]
 async fn reveal_proxy_url(core: Core<'_>) -> CommandResult<String> {
@@ -294,6 +350,7 @@ fn main() {
             #[cfg(feature = "internal-test")]
             internal_test::internal_test_control,
             get_status,
+            get_build_profile_tag,
             get_native_control,
             acknowledge_native_notice,
             save_cache_preferences,
@@ -306,6 +363,13 @@ fn main() {
             test_connection,
             test_proxy_url,
             cancel_proxy_test,
+            test_line,
+            test_auto_lines,
+            cancel_line_test,
+            get_authorization_dialog,
+            activate_authorization,
+            unbind_authorization,
+            refresh_authorization,
             reveal_proxy_url,
             save_preferences,
             clear_cache,
@@ -341,7 +405,27 @@ fn main() {
                     .try_init();
                 #[cfg(windows)]
                 let webview_data = gbf_core::data_directory::runtime_directory(&root)?;
-                let core = Arc::new(Runtime::new(root)?);
+                let profile = embedded_public_profile::EMBEDDED_PUBLIC_PROFILE.map(
+                    |(deployment_id, url, ca_pem)| gbf_core::authorization::EmbeddedPublicProfile {
+                        deployment_id: deployment_id.to_owned(),
+                        url: url.to_owned(),
+                        ca_pem: ca_pem.to_owned(),
+                    },
+                );
+                let core = Arc::new(Runtime::new_with_profile(root, profile)?);
+                if core.authorization.view().configured {
+                    let weak = Arc::downgrade(&core);
+                    tauri::async_runtime::spawn(async move {
+                        let mut interval =
+                            tokio::time::interval(std::time::Duration::from_secs(15));
+                        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                        loop {
+                            interval.tick().await;
+                            let Some(core) = weak.upgrade() else { break };
+                            let _ = core.authorization_poll().await;
+                        }
+                    });
+                }
                 if !existing {
                     let mut settings = core.settings.write().unwrap();
                     settings.preferences.language = appearance::system_language();

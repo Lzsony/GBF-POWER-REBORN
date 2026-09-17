@@ -33,12 +33,17 @@ impl Protocol {
 pub enum ConnectionMode {
     Direct,
     Proxy,
+    Accelerate,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConnectionInput {
     pub mode: ConnectionMode,
+    #[serde(default)]
+    pub selected_line_id: String,
+    #[serde(default)]
+    pub line_selection: crate::config::LineSelection,
     /// None preserves the existing endpoint AND its saved credential. Never send a display mask.
     pub proxy_url: Option<String>,
     pub listen_port: u16,
@@ -51,6 +56,10 @@ pub struct ConnectionInput {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsView {
     pub mode: ConnectionMode,
+    #[serde(default)]
+    pub selected_line_id: String,
+    #[serde(default)]
+    pub line_selection: crate::config::LineSelection,
     pub proxy_url: String,
     pub has_authentication: bool,
     pub listen_port: u16,
@@ -64,8 +73,11 @@ impl SettingsView {
         Self {
             mode: match settings.mode {
                 Mode::Direct => ConnectionMode::Direct,
+                Mode::Accelerate => ConnectionMode::Accelerate,
                 _ => ConnectionMode::Proxy,
             },
+            selected_line_id: settings.selected_line_id.clone(),
+            line_selection: settings.line_selection,
             proxy_url: display_url(settings, None),
             has_authentication: !settings.username.is_empty(),
             listen_port: settings.listen_port,
@@ -134,8 +146,11 @@ pub fn apply_input(
     } else {
         None
     };
+    next.selected_line_id = input.selected_line_id.clone();
+    next.line_selection = input.line_selection;
     next.mode = match input.mode {
         ConnectionMode::Direct => Mode::Direct,
+        ConnectionMode::Accelerate => Mode::Accelerate,
         ConnectionMode::Proxy => next.proxy_protocol.mode(),
     };
     next.validate()?;
@@ -209,6 +224,8 @@ mod tests {
     fn draft(url: Option<&str>) -> ConnectionInput {
         ConnectionInput {
             mode: ConnectionMode::Proxy,
+            selected_line_id: String::new(),
+            line_selection: Default::default(),
             proxy_url: url.map(str::to_string),
             listen_port: 8123,
             https_cache: false,

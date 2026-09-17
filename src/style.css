@@ -134,6 +134,13 @@ html, body, #root { height:100%; overflow:hidden; }
 .app-shell { height:100dvh; min-height:0; overflow:hidden; }
 .content { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .connection-test { flex:0 0 60px; min-height:30px; height:30px; padding:4px 10px; }
+.line-field { width:100%; }
+.auth-fields { display:flex; flex-direction:column; gap:10px; }
+.auth-fields label { display:flex; flex-direction:column; gap:5px; }
+.auth-fields p { margin-bottom:0; }
+.authorization-validity { display:flex; justify-content:space-between; gap:12px; color:var(--muted); }
+.authorization-validity strong { color:var(--text); font-weight:500; }
+.menu-authorization { color:var(--muted); margin-left:8px; }
 .statusbar { height:54px; min-height:54px; padding:4px 16px 10px; align-items:flex-end; }
 .statusbar span:first-child { flex:1; min-width:0; max-width:none; line-height:20px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 .statusbar span:last-child { flex:0 0 auto; }

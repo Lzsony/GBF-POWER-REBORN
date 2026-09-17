@@ -4,6 +4,21 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
+    AuthNotConfigured,
+    AuthRequired,
+    AuthInvalid,
+    AuthRevoked,
+    AuthUnavailable,
+    AuthDeviceLimit,
+    AuthDeviceBound,
+    AuthLineDenied,
+    LineInvalid,
+    LineConflict,
+    SshNotConfigured,
+    SshMissing,
+    SshAuthenticationFailed,
+    SshHostKeyMismatch,
+    SshConnectionFailed,
     UrlInvalid,
     ProtocolUnsupported,
     UrlComponents,

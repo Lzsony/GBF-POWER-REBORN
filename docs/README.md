@@ -7,9 +7,10 @@
 | 項目 | 狀態 |
 | --- | --- |
 | 架構、授權與協作規範 | 已建立 |
-| 桌面客戶端、直連／上游代理、本機快取 | 0.3.0；四語介面 |
-| Control、SSH Gateway 與部署工具 | 尚未實作 |
-| macOS arm64／Windows x64 驗證 | 詳見驗證紀錄；Windows 由 CI 執行 |
+| 桌面客戶端、直連／上游代理、本機快取 | 0.4.0；四語介面 |
+| 授權與 SSH 加速 | 由內嵌公開 profile 啟用；節點由 Control 指派 |
+| Control、SSH Gateway 與部署工具 | 已實作；Linux 實機部署驗收另列 |
+| macOS arm64／Windows x64 驗證 | 詳見驗證紀錄；Windows 提供 CI 工作流程 |
 | 私密漏洞回報管道 | 待配置；詳見安全政策 |
 
 ## 技術規格
@@ -21,7 +22,8 @@
 | [系統架構](architecture.md) | 元件職責、PAC 分流、上游模式、快取與 TLS 邊界 |
 | [本機快取與背景工作](cache.md) | 快取儲存、素材預取、記憶體預熱、體檢及統計 |
 | [資料處理與隱私](privacy.md) | 資料類型、處理位置、信任邊界與診斷要求 |
-| [自建服務部署規格](self-hosted-gateway.md) | 部署拓撲、服務隔離、配置要求與驗收條件 |
+| [自建服務部署](self-hosted-gateway.md) | 單節點、多節點、追加與撤回，以及內嵌服務配置的客戶端建置 |
+| [服務端接口](../server/README.md) | Go 工具鏈、Control／Gateway 命令、帳號授權與協定 |
 
 ## 專案規範
 

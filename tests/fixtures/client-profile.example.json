@@ -1,0 +1,5 @@
+{
+  "deploymentId": "test-deployment",
+  "url": "https://example.invalid/",
+  "caCertificateFile": "control-ca-public.example.txt"
+}

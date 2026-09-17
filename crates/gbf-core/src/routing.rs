@@ -26,6 +26,9 @@ pub fn client(
     password: &str,
     route_upstream: bool,
 ) -> Result<reqwest::Client> {
+    if route_upstream && settings.mode == Mode::Accelerate {
+        bail!(crate::error::ErrorCode::SshConnectionFailed);
+    }
     let mut builder = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -82,6 +85,9 @@ async fn connect_inner(
             .context("無法連線至來源")?;
         s.set_nodelay(true)?;
         return Ok(Box::new(s));
+    }
+    if settings.mode == Mode::Accelerate {
+        bail!(crate::error::ErrorCode::SshConnectionFailed);
     }
     // Resolve upstream first to catch hostname aliases pointing back to this listener.
     let addresses: Vec<_> = tokio::net::lookup_host((

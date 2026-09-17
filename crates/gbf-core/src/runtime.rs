@@ -1,16 +1,18 @@
 #[path = "proxy_test.rs"]
 mod proxy_test;
+use crate::acceleration::{self, AccelerationStatus, LineView, SharedStatus, Tunnel};
 use crate::error::ErrorCode;
 use crate::{
     cache::Cache,
     certificate::{self, Authority, CertificateStatus},
-    config::{read_password, write_password, Mode, Settings},
+    config::{read_password, write_password, LineSelection, Mode, Settings},
     metrics::{Metrics, ProbeSample, Snapshot},
     proxy::{self, ContextState},
     routing,
 };
 use anyhow::{bail, Context, Result};
 pub use proxy_test::ProxyTestResult;
+pub type LineTestResult = ProxyTestResult;
 use serde::Serialize;
 use std::{
     path::PathBuf,
@@ -23,6 +25,7 @@ use tokio::{net::TcpListener, sync::Mutex, task::JoinHandle};
 use std::sync::atomic::Ordering;
 
 struct Running {
+    tunnel: Option<Tunnel>,
     context: Arc<ContextState>,
     listener: JoinHandle<()>,
 }
@@ -62,6 +65,41 @@ mod tests {
         assert!(core.start().await.is_err());
         assert!(core.control_state().shutting_down);
         assert!(!core.control_state().running);
+    }
+
+    #[tokio::test]
+    async fn generic_client_rejects_acceleration_without_changing_direct_or_proxy_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = Runtime::new(dir.path().into()).unwrap();
+        assert!(!core.status().await.unwrap().authorization.configured);
+        let accelerate = Settings {
+            mode: Mode::Accelerate,
+            ..Default::default()
+        };
+        assert_eq!(
+            core.save(accelerate.clone(), None)
+                .await
+                .unwrap_err()
+                .downcast_ref::<ErrorCode>(),
+            Some(&ErrorCode::AuthNotConfigured)
+        );
+        assert!(core.probe(accelerate, None).await.is_err());
+        assert_eq!(Settings::load(dir.path()).unwrap().mode, Mode::Direct);
+        core.save(
+            Settings {
+                mode: Mode::Socks5,
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(Settings::load(dir.path()).unwrap().mode, Mode::Socks5);
+        assert!(!dir.path().join("deployments").exists());
+        assert!(crate::config_store::load(dir.path())
+            .unwrap()
+            .authorizations
+            .is_empty());
     }
 
     struct MemoryVault(std::sync::Mutex<String>);
@@ -449,6 +487,7 @@ mod tests {
         *core.active.lock().await = Some(Running {
             context: context.clone(),
             listener: tokio::spawn(async {}),
+            tunnel: None,
         });
         *core.started.write().unwrap() = Some(Instant::now());
         core.save_preferences(Preferences {
@@ -506,6 +545,8 @@ mod tests {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionProbe {
     pub latency_ms: u64,
+    pub line_id: Option<String>,
+    pub line_name: Option<String>,
 }
 
 trait PasswordVault: Send + Sync {
@@ -562,6 +603,7 @@ pub struct Runtime {
     #[cfg(test)]
     switch_probe_url: String,
     pub root: PathBuf,
+    pub authorization: crate::authorization::Authorization,
     operations: Mutex<()>,
     control: tokio::sync::watch::Sender<ControlState>,
     proxy_test: Mutex<Option<proxy_test::Job>>,
@@ -571,6 +613,8 @@ pub struct Runtime {
     metrics: RwLock<Arc<Metrics>>,
     active: Mutex<Option<Running>>,
     started: RwLock<Option<Instant>>,
+    acceleration: SharedStatus,
+    selected_status: RwLock<Option<SharedStatus>>,
     audit: Arc<crate::cache::AuditState>,
     audit_job: Mutex<Option<JoinHandle<()>>>,
 }
@@ -578,6 +622,9 @@ pub struct Runtime {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub running: bool,
+    pub authorization: crate::authorization::View,
+    pub acceleration: AccelerationStatus,
+    pub acceleration_lines: Vec<LineView>,
     pub cache_preferences: crate::preferences::CachePreferences,
     pub audit: crate::cache::AuditProgress,
     pub settings: crate::connection::SettingsView,
@@ -599,6 +646,12 @@ impl Runtime {
         }
     }
     pub fn new(root: PathBuf) -> Result<Self> {
+        Self::new_with_profile(root, None)
+    }
+    pub fn new_with_profile(
+        root: PathBuf,
+        profile: Option<crate::EmbeddedPublicProfile>,
+    ) -> Result<Self> {
         std::fs::create_dir_all(&root)?;
         crate::config_store::initialize(&root)?;
         let settings = Settings::load(&root)?;
@@ -609,6 +662,7 @@ impl Runtime {
             settings_writer: Arc::new(DiskSettings),
             #[cfg(test)]
             switch_probe_url: "https://game.granbluefantasy.jp/".into(),
+            authorization: crate::authorization::Authorization::new(root.clone(), profile)?,
             operations: Mutex::new(()),
             control: tokio::sync::watch::channel(ControlState::default()).0,
             proxy_test: Mutex::new(None),
@@ -619,6 +673,8 @@ impl Runtime {
             metrics: RwLock::new(Arc::new(Metrics::default())),
             active: Mutex::new(None),
             started: RwLock::new(None),
+            acceleration: Arc::new(RwLock::new(Default::default())),
+            selected_status: RwLock::new(None),
             audit: Arc::new(Default::default()),
             audit_job: Mutex::new(None),
         })
@@ -651,6 +707,22 @@ impl Runtime {
         let cache_bytes = tokio::task::spawn_blocking(move || cache.usage()).await??;
         Ok(Status {
             running: started.is_some(),
+            authorization: self.authorization.view(),
+            acceleration: self.acceleration_status(),
+            acceleration_lines: self
+                .authorization
+                .available_lines()
+                .into_iter()
+                .map(|(id, name)| LineView {
+                    revision: self
+                        .authorization
+                        .line(&id)
+                        .map(|line| line.revision(&self.root))
+                        .unwrap_or_default(),
+                    id,
+                    name,
+                })
+                .collect(),
             cache_preferences: settings.cache_preferences,
             audit: self.audit.progress.lock().unwrap().clone(),
             pac_url: settings.pac_url(),
@@ -661,17 +733,21 @@ impl Runtime {
             certificate: self.certificate.read().unwrap().clone(),
         })
     }
+    pub async fn cancel_line_test(&self, id: Option<&str>) {
+        self.cancel_proxy_test(id).await;
+    }
     pub async fn start(&self) -> Result<()> {
         let _operation = self.operation().await;
         self.cancel_proxy_test(None).await;
         self.start_inner().await
     }
     async fn start_inner(&self) -> Result<()> {
-        self.start_preserving(None, false).await
+        self.start_preserving(None, None, false).await
     }
     async fn start_preserving(
         &self,
         retained: Option<(Arc<Metrics>, Instant)>,
+        forced: Option<acceleration::Line>,
         verify_path: bool,
     ) -> Result<()> {
         if self.control_state().shutting_down {
@@ -725,23 +801,46 @@ impl Runtime {
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, settings.listen_port))
             .await
             .context(ErrorCode::ProxyBindFailed)?;
+        let mut tunnel = if settings.mode == Mode::Accelerate {
+            Some(if let Some(line) = forced {
+                Tunnel::start(&self.root, line, self.acceleration.clone()).await?
+            } else {
+                self.open_acceleration(&settings).await?.0
+            })
+        } else {
+            *self.acceleration.write().unwrap() = Default::default();
+            None
+        };
         let mode = match settings.mode {
             Mode::Direct => "direct",
+            Mode::Accelerate => "accelerate",
             Mode::Http => "http",
             Mode::Socks5 => "socks5",
         };
+        let routed = tunnel
+            .as_ref()
+            .map(|t| t.routed_settings(&settings))
+            .unwrap_or(settings);
         let metrics = retained
             .as_ref()
             .map(|(m, _)| m.clone())
             .unwrap_or_else(|| Arc::new(Metrics::default()));
-        let context = Arc::new(ContextState::new(
-            settings,
+        let context = match ContextState::new(
+            routed,
             password,
             self.cache.clone(),
             authority,
             metrics.clone(),
-        )?);
-        if verify_path {
+        ) {
+            Ok(context) => Arc::new(context),
+            Err(error) => {
+                if let Some(tunnel) = tunnel.as_mut() {
+                    tunnel.stop().await;
+                }
+                return Err(error);
+            }
+        };
+        if verify_path && tunnel.is_none() {
             let probe = context
                 .upstream
                 .head(self.switch_probe_url())
@@ -754,17 +853,39 @@ impl Runtime {
         }
         *self.metrics.write().unwrap() = metrics;
         let listener = tokio::spawn(proxy::serve(listener, context.clone()));
-        for target in 1..3 {
+        for target in 0..3 {
+            if target == 0 && tunnel.is_none() {
+                continue;
+            }
             let probe = context.clone();
+            let session: Option<crate::probe::SessionReader> = if target == 0 {
+                tunnel.as_ref().map(|t| Box::new(t.session_reader()) as _)
+            } else {
+                None
+            };
+            let tcp_target = if target == 0 {
+                tunnel.as_ref().map(|t| (t.line.host.clone(), t.line.port))
+            } else {
+                None
+            };
             context.tasks.spawn(async move {
-                crate::probe::monitor(probe, target).await;
+                crate::probe::monitor(probe, target, session, tcp_target).await;
             });
         }
         context
             .configure_background(context.settings.cache_preferences)
             .await;
-        tracing::info!(mode, "proxy_started");
-        *active = Some(Running { context, listener });
+        let line = self.acceleration.read().unwrap().line_id.clone();
+        tracing::info!(
+            mode,
+            line = line.as_deref().unwrap_or("none"),
+            "proxy_started"
+        );
+        *active = Some(Running {
+            context,
+            listener,
+            tunnel,
+        });
         *self.started.write().unwrap() = Some(
             retained
                 .map(|(_, start)| start)
@@ -780,9 +901,14 @@ impl Runtime {
     async fn stop_inner(&self) -> Result<()> {
         self.cancel_proxy_test(None).await;
         let mut active = self.active.lock().await;
-        if let Some(running) = active.take() {
+        if let Some(mut running) = active.take() {
             *self.started.write().unwrap() = None;
             running.context.cancel.cancel();
+            if let Some(tunnel) = running.tunnel.as_mut() {
+                tunnel.stop().await;
+            }
+            *self.acceleration.write().unwrap() = Default::default();
+            *self.selected_status.write().unwrap() = None;
             running
                 .context
                 .configure_background(crate::preferences::CachePreferences {
@@ -830,8 +956,26 @@ impl Runtime {
             .await??;
         }
         let path_changed = route_changed(&old, &settings, password.is_some());
+        if settings.mode == Mode::Accelerate && path_changed {
+            self.authorization.refresh().await?;
+            let ids = self.authorization.available_lines();
+            let id = if settings.line_selection == LineSelection::Auto {
+                ids.first()
+                    .map(|x| x.0.as_str())
+                    .ok_or(ErrorCode::AuthLineDenied)?
+            } else {
+                &settings.selected_line_id
+            };
+            self.authorization.line(id)?;
+        }
         let restart =
             started.is_some() && (path_changed || old.https_cache != settings.https_cache);
+        let old_line = self
+            .active
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|r| r.tunnel.as_ref().map(|t| t.line.clone()));
         let old_password = if password.is_some() {
             Some({
                 let vault = self.vault.clone();
@@ -855,7 +999,12 @@ impl Runtime {
             tokio::task::spawn_blocking(move || writer.save(&root, &next)).await??;
             *self.settings.write().unwrap() = settings.clone();
             if restart {
-                self.start_preserving(started.map(|s| (metrics.clone(), s)), true)
+                let forced = if !path_changed {
+                    old_line.clone()
+                } else {
+                    None
+                };
+                self.start_preserving(started.map(|s| (metrics.clone(), s)), forced, true)
                     .await?;
                 if path_changed {
                     metrics.reset_line();
@@ -887,8 +1036,9 @@ impl Runtime {
                 // the credential rollback failed. Restart only after both succeed.
                 settings_result??;
                 secret_result?;
+                *self.selected_status.write().unwrap() = None;
                 if restart {
-                    self.start_preserving(started.map(|s| (metrics, s)), true)
+                    self.start_preserving(started.map(|s| (metrics, s)), old_line, true)
                         .await?;
                 }
                 Ok::<(), anyhow::Error>(())
@@ -1063,6 +1213,65 @@ impl Runtime {
         *self.certificate.write().unwrap() = status.clone();
         Ok(status)
     }
+    fn acceleration_status(&self) -> AccelerationStatus {
+        self.selected_status
+            .read()
+            .unwrap()
+            .as_ref()
+            .unwrap_or(&self.acceleration)
+            .read()
+            .unwrap()
+            .clone()
+    }
+    async fn open_acceleration(&self, settings: &Settings) -> Result<(Tunnel, Option<u64>)> {
+        *self.selected_status.write().unwrap() = None;
+        if settings.line_selection == LineSelection::Manual {
+            let tunnel = Tunnel::start(
+                &self.root,
+                self.acceleration_line(&settings.selected_line_id).await?,
+                self.acceleration.clone(),
+            )
+            .await?;
+            return Ok((tunnel, None));
+        }
+        *self.acceleration.write().unwrap() = AccelerationStatus {
+            state: acceleration::Phase::Selecting,
+            ..Default::default()
+        };
+        let result = async {
+            self.authorization.refresh().await?;
+            let lines = self
+                .authorization
+                .available_lines()
+                .into_iter()
+                .map(|(id, _)| self.authorization.line(&id))
+                .collect::<Result<Vec<_>>>()?;
+            crate::selection::select(&self.root, settings, lines).await
+        }
+        .await;
+        match result {
+            Ok(selected) => {
+                *self.selected_status.write().unwrap() = Some(selected.tunnel.status.clone());
+                Ok((
+                    selected.tunnel,
+                    Some((selected.score.median_micros / 1000) as u64),
+                ))
+            }
+            Err(error) => {
+                *self.acceleration.write().unwrap() = AccelerationStatus {
+                    state: acceleration::Phase::Error,
+                    error: Some(
+                        error
+                            .downcast_ref::<ErrorCode>()
+                            .copied()
+                            .unwrap_or(ErrorCode::SshConnectionFailed),
+                    ),
+                    line_id: None,
+                };
+                Err(error)
+            }
+        }
+    }
     pub async fn probe(
         &self,
         settings: Settings,
@@ -1070,13 +1279,114 @@ impl Runtime {
     ) -> Result<ConnectionProbe> {
         let _operation = self.operation().await;
         self.cancel_proxy_test(None).await;
-        if self.active.lock().await.is_some() {
+        let active = self.active.lock().await;
+        if active.is_some() {
             bail!(ErrorCode::StopRequired);
         }
         self.ensure_no_audit()?;
-        Self::probe_routed(settings, password)
-            .await
-            .map(|latency_ms| ConnectionProbe { latency_ms })
+        settings.validate()?;
+        let (mut tunnel, median) = if settings.mode == Mode::Accelerate {
+            let (t, m) = self.open_acceleration(&settings).await?;
+            (Some(t), m)
+        } else {
+            (None, None)
+        };
+        let selected = self
+            .acceleration_status()
+            .line_id
+            .filter(|_| tunnel.is_some());
+        let name = selected.as_ref().and_then(|id| {
+            self.authorization
+                .available_lines()
+                .into_iter()
+                .find(|(i, _)| i == id)
+                .map(|(_, name)| name)
+        });
+        let routed = tunnel
+            .as_ref()
+            .map(|t| t.routed_settings(&settings))
+            .unwrap_or(settings);
+        let result = if let Some(ms) = median {
+            Ok(ms)
+        } else {
+            Self::probe_routed(routed, password).await
+        };
+        if let Some(t) = tunnel.as_mut() {
+            t.stop().await;
+        }
+        *self.selected_status.write().unwrap() = None;
+        *self.acceleration.write().unwrap() = Default::default();
+        result.map(|latency_ms| ConnectionProbe {
+            latency_ms,
+            line_id: selected,
+            line_name: name,
+        })
+    }
+
+    async fn acceleration_line(&self, id: &str) -> Result<acceleration::Line> {
+        let refreshed = self.authorization.refresh().await;
+        if let Err(error) = refreshed {
+            if error.downcast_ref::<ErrorCode>() != Some(&ErrorCode::AuthUnavailable) {
+                return Err(error);
+            }
+        }
+        self.authorization.line(id)
+    }
+    pub async fn activate_authorization(&self, code: Option<String>) -> Result<()> {
+        let _operation = self.operation().await;
+        self.cancel_proxy_test(None).await;
+        if self.active.lock().await.is_some() {
+            bail!(ErrorCode::StopRequired);
+        }
+        self.authorization.activate_code(code).await
+    }
+    pub async fn unbind_authorization(&self) -> Result<()> {
+        let _operation = self.operation().await;
+        self.cancel_proxy_test(None).await;
+        if self.active.lock().await.is_some() {
+            bail!(ErrorCode::StopRequired);
+        }
+        self.authorization.unbind().await?;
+        Ok(())
+    }
+    pub async fn authorization_poll(&self) -> Result<()> {
+        if !self.authorization.view().configured {
+            return Ok(());
+        }
+        // Network polling is not a foreground operation. Do not hold the lifecycle
+        // lock or disable UI/tray controls while waiting for the Control service.
+        let result = self.authorization.refresh().await;
+        let lock = self.operations.lock().await;
+        let current = self.settings.read().unwrap().clone();
+        let running = self.started.read().unwrap().is_some();
+        let active_id = if running {
+            self.acceleration_status().line_id
+        } else {
+            None
+        };
+        // Another foreground action may have completed while this poll waited.
+        // Decide from the latest atomic authorization snapshot and current route.
+        let (phase, available) = self.authorization.route_snapshot();
+        let line_denied = route_denied(&current, active_id.as_deref(), &available);
+        let denied = phase == crate::authorization::AuthPhase::Revoked
+            || (phase == crate::authorization::AuthPhase::Active && line_denied);
+        if denied && running && current.mode == Mode::Accelerate {
+            self.control.send_modify(|state| state.busy = true);
+            let _operation = Operation {
+                core: self,
+                _lock: lock,
+            };
+            self.cancel_proxy_test(None).await;
+            self.stop_inner().await?;
+            *self.acceleration.write().unwrap() = AccelerationStatus {
+                state: acceleration::Phase::Error,
+                error: Some(ErrorCode::AuthRevoked),
+                line_id: active_id,
+            };
+            tracing::info!("authorization_stopped");
+            return Err(ErrorCode::AuthRevoked.into());
+        }
+        result
     }
 
     async fn probe_routed(settings: Settings, password: Option<String>) -> Result<u64> {
@@ -1115,12 +1425,32 @@ impl Runtime {
 
 fn route_changed(old: &Settings, next: &Settings, password_changed: bool) -> bool {
     old.mode != next.mode
+        || (next.mode == Mode::Accelerate
+            && (old.line_selection != next.line_selection
+                || (next.line_selection == LineSelection::Manual
+                    && old.selected_line_id != next.selected_line_id)))
         || (matches!(next.mode, Mode::Http | Mode::Socks5)
             && (password_changed
                 || old.upstream_host != next.upstream_host
                 || old.upstream_port != next.upstream_port
                 || old.username != next.username
                 || old.proxy_protocol != next.proxy_protocol))
+}
+
+fn route_denied(
+    settings: &Settings,
+    active_id: Option<&str>,
+    available: &[(String, String)],
+) -> bool {
+    if settings.line_selection == LineSelection::Auto {
+        active_id
+            .map(|used| !available.iter().any(|(id, _)| id == used))
+            .unwrap_or(available.is_empty())
+    } else {
+        !available
+            .iter()
+            .any(|(id, _)| id == &settings.selected_line_id)
+    }
 }
 
 #[cfg(test)]
