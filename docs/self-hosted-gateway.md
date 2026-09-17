@@ -2,6 +2,8 @@
 
 0.4.0 提供 Linux Control、SSH Gateway、管理 TUI 及配置驅動的部署工具。部署者自備主機與管理 SSH，完成服務部署後，將公開服務 profile 內嵌到自行建置的客戶端，再分發給使用者。專案不提供公共節點。
 
+首次操作見[部署指引](deployment-guide.md)與[建置指引](build-guide.md)；本文保留拓撲、隔離、配置及失敗處理的技術契約。
+
 ## 拓撲與服務隔離
 
 | 拓撲 | 配置 |
@@ -64,12 +66,26 @@ python3 deploy/manage.py --config deploy/topology.local.json --verify
 
 `--verify` 檢查服務狀態與 doctor 結果，並從管理機核對 Control 公開 TLS 入口與 Gateway host key。這不代替使用者裝置的授權、PAC 或完整遊戲流程驗收。
 
+### 管理命令安裝
+
+`--apply` 完成服務部署、註冊、外部驗證及公開 profile 匯出後，於本次相關主機安裝 `/usr/local/bin/gpr`。入口獨立於 release，呼叫對應角色的 `current` 執行檔。既有部署可執行：
+
+```sh
+python3 deploy/manage.py --config deploy/topology.local.json --install-manager
+```
+
+此模式依拓撲與主機身份去重，取得部署鎖後再次核對身份；不需要 release、不切換服務版本、不重啟服務。程式以固定路徑及參數呼叫系統工具，沿用管理帳號的 `sudo -n`，不修改 sudoers。入口檔及其父目錄須由 root 管理、不可由群組或其他使用者寫入；安裝拒絕同名非受管理檔案及符號連結，通過 hash 核對後原子替換。
+
+`gpr` 提供 `admin`、`status`、`logs`、`doctor`、`start`、`stop`、`restart`。查詢預設所有已安裝角色；啟停須明確指定角色或 `all`。`logs` 預設最近 100 行，`-f` 持續追蹤。`doctor` 區分通過、失敗及未檢查；存在失敗時回傳非零退出碼。完整用法見[日常管理](deployment-guide.md#日常管理)。
+
+管理入口安裝失敗時，journal 記為 `manager-install-failed`，已驗證服務與匯出的 profile 保留。排除同名路徑或權限問題後單獨重試 `--install-manager`；原 journal 保留歷史失敗狀態，該重試不重啟或撤回服務。角色撤回不移除共用入口，既有入口繼續使用撤回後的角色執行檔。
+
 ## 節點與帳號管理
 
 新節點註冊後保持 `pending`。在 Control 主機執行管理 TUI：
 
 ```sh
-sudo -u gbf-control /opt/gbf-reborn/control/current/reborn admin --socket /run/gbf-control/admin.sock
+gpr admin
 ```
 
 在節點頁確認身份、健康上報與診斷，再明確開放節點。若需要先驗收 pending 節點，可另對測試帳號授予 preview。新增帳號時，TUI 讓管理者勾選零個以上已開放節點；帳號與初始 grants 在同一交易建立，不自動授予任何節點。

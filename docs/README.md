@@ -15,8 +15,12 @@
 
 ## 技術規格
 
+首次自建可先閱讀[部署指引](deployment-guide.md)，再按[建置指引](build-guide.md)製作客戶端；日常管理使用 `gpr` 命令。
+
 | 文件 | 內容 |
 | --- | --- |
+| [部署指引](deployment-guide.md) | 單主機入門、帳號授權、gpr 日常管理及後續更新 |
+| [建置指引](build-guide.md) | Linux 服務端、macOS／Windows 客戶端與公開 profile |
 | [客戶端操作](client.md) | 接入、設定、快取、憑證、常駐與統計 |
 | [驗證紀錄](validation.md) | 檢查入口、執行結果與平台限制 |
 | [系統架構](architecture.md) | 元件職責、PAC 分流、上游模式、快取與 TLS 邊界 |

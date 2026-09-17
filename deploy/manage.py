@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Manage self-hosted Control and Gateway services over verified SSH."""
 import argparse
+import hashlib
 import io
 import ipaddress
 import json
@@ -21,6 +22,7 @@ from check_release import verify_server
 
 ROOT = Path(__file__).resolve().parents[1]
 REMOTE = Path(__file__).with_name('remote.py')
+MANAGER = Path(__file__).with_name('gpr.py')
 SERVICE_BINARY = '/opt/gbf-reborn/{role}/current/reborn'
 SERVICE_CONFIG = '/etc/gbf-reborn/{role}/config.json'
 
@@ -226,6 +228,20 @@ def deployment_plan(groups):
     return [{'machineIdHash': group['machineIdHash'], 'sshTargets': group['aliases'], 'architecture': group['architecture'], 'roles': list(group['roles']), 'requiredInboundTcpPorts': sorted(spec['port'] for spec in group['roles'].values())} for group in groups]
 
 
+def install_managers(groups, ssh):
+    source = MANAGER.read_text()
+    digest = hashlib.sha256(source.encode()).hexdigest()
+    results = []
+    for group in groups:
+        try:
+            results.append(ssh.worker(group['target'], {'action': 'install-manager', 'machineIdHash': group['machineIdHash'],
+                'source': source, 'sha256': digest}))
+        except Exception:
+            raise RuntimeError('Manager installation failed on ' + group['target'] +
+                '; check SSH/sudo, /usr/local/bin ownership and any existing gpr file or symlink. Resolve the conflict and retry --install-manager; services were not restarted.') from None
+    return results
+
+
 def apply(topology, groups, artifacts, ssh, add_node=None):
     run_id = uuid.uuid4().hex
     journal_path = topology['outputDir'] / ('run-' + run_id + '.local.json')
@@ -274,11 +290,16 @@ def apply(topology, groups, artifacts, ssh, add_node=None):
         selected = [group for group in groups if add_node is None or 'control' in group['roles'] or group['roles'].get('gateway', {}).get('id') == add_node]
         ssh.external(topology, selected, certificate)
         profile_path = export_client(topology, certificate)
-        journal['state'] = 'complete'; write_json(journal_path, journal)
-        return {'runId': run_id, 'clientProfile': str(profile_path), 'newGatewayState': 'pending', 'requiredPorts': deployment_plan(groups)}
     except Exception:
         journal['state'] = 'enrollment-pending'; write_json(journal_path, journal)
         raise RuntimeError('Enrollment or verification incomplete. Correct connectivity or ticket validity and rerun --apply; identities and pending nodes are retained. Rollback record: ' + journal_path.name) from None
+    try:
+        install_managers(selected, ssh)
+    except Exception:
+        journal['state'] = 'manager-install-failed'; write_json(journal_path, journal)
+        raise RuntimeError('Services are deployed and verified; manager installation failed. Resolve /usr/local/bin/gpr ownership or name conflicts, then rerun --install-manager. Services were not rolled back. Journal: ' + journal_path.name) from None
+    journal['state'] = 'complete'; write_json(journal_path, journal)
+    return {'runId': run_id, 'clientProfile': str(profile_path), 'newGatewayState': 'pending', 'requiredPorts': deployment_plan(groups)}
 
 
 def rollback_steps(steps, ssh):
@@ -297,6 +318,7 @@ def main():
     mode.add_argument('--apply', action='store_true')
     mode.add_argument('--verify', action='store_true')
     mode.add_argument('--export-client', action='store_true')
+    mode.add_argument('--install-manager', action='store_true', help='Install gpr without updating or restarting services')
     mode.add_argument('--rollback', metavar='RUN_ID')
     parser.add_argument('--add-node', metavar='NODE_ID')
     args = parser.parse_args()
@@ -314,6 +336,8 @@ def main():
         if failures: raise RuntimeError('Some hosts could not roll back; rerun the same rollback ID')
         print(json.dumps({'rolledBack': args.rollback})); return
     groups = preflight(topology, ssh)
+    if args.install_manager:
+        print(json.dumps({'managers': install_managers(groups, ssh)})); return
     if args.verify:
         for group in groups:
             for role in group['roles']: ssh.worker(group['target'], {'action': 'verify', 'machineIdHash': group['machineIdHash'], 'role': role})

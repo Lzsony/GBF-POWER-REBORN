@@ -18,6 +18,8 @@ LIB = Path('/opt/gbf-reborn')
 STATE = Path('/var/lib/gbf-reborn-deploy')
 LOCK = Path('/run/lock/gbf-reborn-deploy.lock')
 UNITS = Path('/etc/systemd/system')
+MANAGER = Path('/usr/local/bin/gpr')
+MANAGER_HEADER = '#!/usr/bin/python3\n# GPR-MANAGED-SERVICE-CLI-v1\n'
 ROLES = ('control', 'gateway')
 
 
@@ -302,6 +304,45 @@ def apply(request, report):
         raise
 
 
+def ensure_manager_parent():
+    for path in reversed(MANAGER.parents):
+        if path.is_symlink(): raise ValueError('Manager parent must not be a symlink')
+        if not path.exists(): path.mkdir(mode=0o755)
+        info = path.stat()
+        if not path.is_dir() or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            raise ValueError('Manager parent must be owned by root and not group/world writable')
+
+
+def install_manager(request):
+    source = request.get('source')
+    if not isinstance(source, str) or not source.startswith(MANAGER_HEADER) or len(source.encode()) > 65536:
+        raise ValueError('Invalid manager source')
+    digest = hashlib.sha256(source.encode()).hexdigest()
+    if request.get('sha256') != digest:
+        raise ValueError('Manager checksum mismatch')
+    compile(source, str(MANAGER), 'exec')
+    # Root-owned parents prevent replacement of the privileged entry point.
+    ensure_manager_parent()
+    if MANAGER.is_symlink(): raise ValueError('Refusing manager symlink')
+    if MANAGER.exists():
+        info = MANAGER.stat()
+        if not MANAGER.is_file() or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            raise ValueError('Refusing unmanaged manager file')
+        if not MANAGER.read_text().startswith(MANAGER_HEADER):
+            raise ValueError('Manager path is occupied by another program')
+        if MANAGER.read_text() == source and info.st_mode & 0o777 == 0o755:
+            return {'manager': str(MANAGER), 'changed': False, 'sha256': digest}
+    pending = MANAGER.with_name('.gpr-pending-' + uuid.uuid4().hex)
+    try:
+        with pending.open('x') as stream:
+            stream.write(source); stream.flush(); os.fsync(stream.fileno())
+        pending.chmod(0o755)
+        os.replace(pending, MANAGER)
+    finally:
+        if pending.exists(): pending.unlink()
+    return {'manager': str(MANAGER), 'changed': True, 'sha256': digest}
+
+
 def main():
     request = json.load(sys.stdin)
     if request['action'] == 'preflight':
@@ -314,6 +355,7 @@ def main():
             raise ValueError('Physical host identity changed after preflight')
         action = request['action']
         if action == 'apply': result = apply(request, report)
+        elif action == 'install-manager': result = install_manager(request)
         elif action == 'rollback': result = restore(request['snapshot'])
         elif action == 'start':
             if request['role'] not in ROLES: raise ValueError('Invalid service role')

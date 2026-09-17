@@ -53,11 +53,13 @@ npm run desktop
 
 設定、快取與執行資料位於 macOS 的 `~/Library/Application Support/GBF Power Reborn`，或 Windows 的 `%LOCALAPPDATA%/GBF Power Reborn`。上游密碼與 CA 私鑰使用作業系統秘密儲存。詳細操作見[客戶端操作](docs/client.md)。
 
-自建部署從 [topology.example.json](deploy/topology.example.json) 建立本機配置，執行預檢、部署與驗證，再使用輸出的公開 profile 建置客戶端交付給使用者。單節點、多節點、追加節點及撤回命令見[自建服務部署](docs/self-hosted-gateway.md)。
+首次自建請依[部署指引](docs/deployment-guide.md)準備主機、部署服務及建立授權，再依[建置指引](docs/build-guide.md)製作專用客戶端。部署後可用 `gpr admin`、`gpr status`、`gpr logs gateway` 管理服務；多節點與撤回的完整契約見[部署規格](docs/self-hosted-gateway.md)。
 
 ## 文件
 
 - [文件索引與開發狀態](docs/README.md)
+- [部署指引](docs/deployment-guide.md)
+- [建置指引](docs/build-guide.md)
 - [系統架構](docs/architecture.md)
 - [本機快取與背景工作](docs/cache.md)
 - [資料處理與隱私](docs/privacy.md)

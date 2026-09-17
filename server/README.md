@@ -18,6 +18,8 @@ go vet ./...
 
 ## 程序接口
 
+正式部署後，日常管理優先使用 `gpr admin`、`gpr status`、`gpr logs gateway`、`gpr doctor`；入口沿用 `sudo -n` 並以對應服務帳號開啟 TUI／診斷。安裝及完整命令見[部署指引](../docs/deployment-guide.md#日常管理)。以下為服務端執行檔的底層接口，既有命令維持相容。
+
 | 命令 | 行為 |
 | --- | --- |
 | `control --config PATH` | 啟動 HTTPS Control 與本機管理 socket |
