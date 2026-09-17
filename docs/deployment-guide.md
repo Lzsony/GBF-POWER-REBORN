@@ -8,7 +8,7 @@
 
 準備一臺 Debian 12／13 或 Ubuntu 24.04／26.04 主機，使用 amd64 或 arm64，並運行 systemd。你需要公網 IP 或可解析的主機名稱，以及可使用 `sudo -n` 的管理 SSH 帳號。
 
-**本機**需要 Python 3、OpenSSH 的 `ssh`／`ssh-keyscan`；建置服務端還需要 Go，見[建置指引](build-guide.md#linux-服務端)。Windows 管理機使用已安裝的 `python` 命令代替本文的 `python3`，或在 WSL 中執行；不要混用兩邊的 SSH 設定與檔案路徑。
+**本機**需要 Python 3.9+、OpenSSH 的 `ssh`／`ssh-keyscan`；建置服務端還需要 Go，見[建置指引](build-guide.md#linux-服務端)。部署工具只檢查本機需要的工具，不安裝本機工具鏈。Windows 管理機使用已安裝的 `python` 命令代替本文的 `python3`，或在 WSL 中執行；不要混用兩邊的 SSH 設定與檔案路徑。
 
 在本機 SSH 設定加入別名，替換 `HostName` 與 `User`：
 
@@ -24,7 +24,7 @@ Host gpr-node
 ssh gpr-node 'sudo -n true'
 ```
 
-**伺服器**須備有 Python 3、`systemctl`、`openssl`、`ssh-keygen`、`ss`、`useradd`、`runuser`、`tar`。工具缺少時先安裝對應套件。保持時間同步，並確保 `hostname` 可由 `/etc/hosts` 正確解析。
+**伺服器**先準備可用的管理 SSH、`sudo -n`、APT、基本系統工具及正常運行的 systemd。遠端 Python、OpenSSL、OpenSSH 用戶端、iproute2、帳號管理工具、tar 或系統 CA 缺少時，部署工具會在套用階段自動補齊；初始檢查不依賴 Python。時間同步、主機名稱解析與防火牆仍由部署者準備。
 
 **成功判據：** SSH 可直接登入，`sudo -n true` 成功退出，無需輸入密碼。
 
@@ -72,7 +72,17 @@ cp deploy/topology.example.json deploy/topology.local.json
 python3 deploy/manage.py --config deploy/topology.local.json --plan
 ```
 
-確認輸出包含 `control`、`gateway`、正確架構及入站 TCP `443`／`2222`。在主機防火牆及供應商的雲端防火牆開放這兩個埠，保留原管理 SSH 埠。工具不會代替你修改防火牆。
+確認輸出包含 `control`、`gateway`、正確架構及入站 TCP `443`／`2222`。`dependencies` 會列出缺失能力與對應套件；`preflight: incomplete` 表示仍有檢查未完成，例如缺少 `ss` 時尚未核對埠占用，不能視為埠已空閒。
+
+`--plan` 不安裝或更新套件。`--apply` 會先核對本機 release，再自動補齊依賴並完成預檢。若想先處理依賴，在本機執行以下命令後重跑 `--plan`：
+
+```sh
+python3 deploy/manage.py --config deploy/topology.local.json --install-deps
+```
+
+`--install-deps` 不要求 release、不部署或重啟服務。已齊全時不執行 APT；缺失時才更新索引並安裝必要套件。若套件已安裝但命令遺失，或安裝需要升級／移除其他套件，工具會停止並提示人工修復。APT 日誌保存在伺服器的 root 專用目錄，錯誤訊息會指出位置。
+
+在主機防火牆及供應商的雲端防火牆開放這兩個服務埠，保留原管理 SSH 埠。工具不會代替你修改防火牆。
 
 若埠已被舊服務占用，先決定舊服務的保留或替換方式，不要直接覆蓋。首次部署的主線以空閒服務埠為前提。
 
@@ -125,7 +135,7 @@ ssh -t gpr-node gpr admin
 python3 deploy/manage.py --config deploy/topology.local.json --install-manager
 ```
 
-這個模式只安裝／更新管理入口，不需要 release、不重啟服務，也不更改帳號、金鑰或資料。若同名路徑已被其他程式或符號連結占用，工具會拒絕覆寫；確認用途並處理衝突後重試。
+這個模式會先補齊缺失依賴，再安裝／更新管理入口；不需要 release、不呼叫服務啟停，也不更改帳號、金鑰或資料。若同名路徑已被其他程式或符號連結占用，工具會拒絕覆寫；確認用途並處理衝突後重試。
 
 ## 更新、增加節點與問題處理
 
@@ -135,5 +145,7 @@ python3 deploy/manage.py --config deploy/topology.local.json --install-manager
 - **註冊或外部驗證失敗：** 先檢查公開地址、防火牆與 `gpr doctor`，修復後重跑 `--apply`；工具保留本次身份供重試。
 - **撤回：** 使用 `--rollback RUN_ID`，保留原配置的 `outputDir` 以找到 journal。撤回不回退業務資料庫、不取消節點註冊，也不移除共用 `gpr` 命令；`gpr` 會使用撤回後的 `current` 執行檔。
 - **權限錯誤：** 檢查管理 SSH 帳號是否仍可執行 `sudo -n true`。Gateway-only 主機不能開啟 `gpr admin`，須連到 Control 主機。
+- **套件安裝失敗：** 排除鎖占用、來源或 dpkg 狀態問題後重跑 `--install-deps`。每臺主機安裝階段最長 15 分鐘，套件鎖最多等待 120 秒；不會強制移除鎖檔或自動執行整機升級。已安裝的套件不會由部署 rollback 卸載。
+- **系統 CA 缺失且 APT 僅使用 HTTPS：** 若因此無法更新套件索引，須先透過可信管道修復系統 CA；工具不會關閉套件來源的 TLS 驗證。
 
 多主機與撤回的完整邊界見[部署規格](self-hosted-gateway.md)；瀏覽器 PAC、授權、憑證與快取操作見[客戶端操作](client.md)。

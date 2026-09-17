@@ -25,9 +25,15 @@ Gateway 的 SSH 協定帳號為 `reborn`，與 OS 服務帳號不同。兩個服
 
 ## 環境與配置
 
-服務主機支援 Debian 12／13、Ubuntu 24.04／26.04，架構為 amd64／arm64，須運行 systemd。預檢要求 Python 3、`systemctl`、`openssl`、`ssh-keygen`、`ss`、`useradd`、`runuser`、`tar` 及可用的非互動 `sudo -n`。
+服務主機支援 Debian 12／13、Ubuntu 24.04／26.04，架構為 amd64／arm64。管理 SSH、非互動 `sudo -n`、APT／dpkg、基本系統工具及運行中的 systemd 為前置條件；不自動安裝或改造管理 SSH、sudoers 或 init 系統。
 
-管理機需要 Python 3、OpenSSH `ssh`／`ssh-keyscan`，並先完成管理 SSH 的 host-key 驗證與登入配置。主機上的套件、時間同步、防火牆與雲端安全組由部署者準備；工具不安裝套件、不修改 sshd、防火牆或 sysctl。
+管理機需要 Python 3.9+、OpenSSH `ssh`／`ssh-keyscan`，並先完成管理 SSH 的 host-key 驗證與登入配置。本機只檢查工具，不安裝工具鏈。遠端缺失依賴依固定映射補齊 `python3`、`openssl`、`openssh-client`、`iproute2`、`passwd`、`util-linux`、`tar`、`ca-certificates` 及必要的新依賴；時間同步、防火牆與雲端安全組仍由部署者準備，工具不修改 sshd、防火牆或 sysctl。
+
+初始檢查透過 POSIX shell 取得主機身份、OS／架構、缺失命令及 CA 狀態，不要求 Python 已存在。`--plan` 保持唯讀；依賴不足時輸出 `preflight: incomplete` 與待檢查項目，不將未知埠狀態視為空閒。`--apply` 先驗證主機與本機 release，再補齊依賴及執行完整預檢；`--install-manager` 同樣會先準備依賴。`--install-deps` 只處理依賴、不要求 release。`--verify`、`--export-client`、`--rollback` 不自動安裝，缺失時提示先執行 `--install-deps`；匯出只檢查 Control，撤回只檢查 journal 涉及的主機。
+
+安裝按主機身份去重，取得主機依賴鎖後重新檢查；齊全時不執行 APT。缺失時才更新索引、模擬並非互動安裝，APT 本身禁止移除，安裝前 hook 再檢查實際交易，拒絕升級或重裝既有套件。已安裝套件的命令／CA 遺失時視為需人工修復，不循環重裝。不執行整機升級、autoremove、換源或核心更新。[APT 行為參考](https://manpages.debian.org/trixie/apt/apt-get.8.en.html)
+
+主機依賴鎖與套件鎖各最多等待 120 秒，每臺主機整個安裝階段由遠端 timeout 限制為最多 15 分鐘；依賴用 SSH 等待上限為 915 秒，其他 SSH 操作維持 300 秒。失敗後不部署服務，保留已完成套件供修復後重試，rollback 不卸載套件。日誌保存在 `/var/log/gbf-reborn-dependencies/`，目錄 0700、檔案 0600，不把 APT 原始輸出混入可能涉及授權材料的 SSH 錯誤回報。若程序遭強制終止，先檢查套件狀態及 `/run/lock/gbf-reborn-dependencies.lock.d/owner.pid` 對應程序；不自動刪除其他操作的鎖。
 
 先建置 Linux 產物，再建立部署配置：
 
@@ -56,7 +62,7 @@ python3 deploy/manage.py --config deploy/topology.local.json --apply
 python3 deploy/manage.py --config deploy/topology.local.json --verify
 ```
 
-`--plan` 連接管理 SSH 進行唯讀預檢，檢查主機身份、OS／架構、工具、已安裝角色、埠占用及 release，輸出各主機角色與必需的入站 TCP 埠。依計畫開放相應的主機及雲端網路規則，再執行 `--apply`。
+`--plan` 連接管理 SSH 進行唯讀依賴檢查；依賴齊全時繼續檢查已安裝角色、埠占用及 release，輸出各主機角色與必需的入站 TCP 埠。先區分 `complete`／`incomplete`，依計畫開放相應的主機及雲端網路規則，再執行 `--apply`。
 
 `--apply` 驗證傳輸後的產物，按角色保存快照並切換版本，於服務主機生成 Control／Gateway 私鑰，使用短期加入 ticket 註冊節點。ticket 僅在程序記憶體及 SSH stdin 傳遞，不寫入本機配置。成功後驗證公開 Control TLS 存活及 Gateway 公開 SSH host key，產生：
 

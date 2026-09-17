@@ -19,6 +19,7 @@ from urllib.request import build_opener, ProxyHandler, HTTPSHandler
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_release import verify_server
+import dependencies
 
 ROOT = Path(__file__).resolve().parents[1]
 REMOTE = Path(__file__).with_name('remote.py')
@@ -82,16 +83,37 @@ def load_topology(path):
 
 
 class SSH:
-    def command(self, target, arguments, data=None):
+    def command(self, target, arguments, data=None, *, timeout=300, dependency=False):
         args = ['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ConnectTimeout=15', '--', ssh_target(target), shlex.join([str(a) for a in arguments])]
         try:
-            result = subprocess.run(args, input=data, capture_output=True, timeout=300)
+            result = subprocess.run(args, input=data, capture_output=True, timeout=timeout)
         except (OSError, subprocess.TimeoutExpired):
+            if dependency: raise RuntimeError('依賴準備的 SSH 連線失敗或超時；遠端安裝最長 15 分鐘，請檢查套件狀態後重試。') from None
             raise RuntimeError('Management SSH was unavailable or timed out') from None
         if result.returncode:
+            if dependency:
+                if result.returncode in (124, 137):
+                    raise RuntimeError('依賴準備超過 15 分鐘；已停止，請檢查 dpkg 狀態後再執行 --install-deps。')
+                marker = re.search(rb'GPR-DEPS:([A-Z_]+)', result.stderr)
+                reason = dependencies.ERRORS.get(marker[1].decode()) if marker else None
+                log = re.search(rb'^log\t(/var/log/gbf-reborn-dependencies/install\.[A-Za-z0-9]+)$', result.stdout, re.M)
+                raise RuntimeError((reason or '依賴檢查失敗；請檢查管理 SSH、sudo -n 及基本系統工具。') +
+                    (' 伺服器日誌：' + log[1].decode() if log else ''))
             # Do not expose child output: admin/join may handle enrollment tickets.
             raise RuntimeError('Verified SSH operation failed; check host prerequisites and service status')
         return result.stdout
+
+    def dependencies(self, target, install=False, identity=None):
+        command = ['sudo', '-n']
+        if install:
+            if not isinstance(identity, str) or not re.fullmatch('[0-9a-f]{64}', identity):
+                raise ValueError('Missing verified dependency host identity')
+            command += ['timeout', '--kill-after=5s', '895']
+        command += ['/bin/sh', '-s', '--', 'install' if install else 'probe']
+        if install: command.append(identity)
+        result = self.command(target, command, dependencies.BOOTSTRAP.read_bytes(),
+            timeout=915 if install else 300, dependency=True)
+        return dependencies.parse_report(result)
 
     def worker(self, target, request):
         result = self.command(target, ['sudo', '-n', 'python3', '-c', REMOTE.read_text()], json.dumps(request).encode())
@@ -168,7 +190,7 @@ def group_hosts(topology, reports):
             ids[item['id']] = identity
             existing = report.get('roles', {}).get('gateway', {})
             if existing.get('nodeId') and existing['nodeId'] != item['id']: raise ValueError('Host already has a different Gateway ID')
-        if item['port'] in report.get('listeners', []) and not (report.get('services', {}).get(role, {}).get('active') and report.get('roles', {}).get(role, {}).get('port') == item['port']):
+        if report.get('listeners') is not None and item['port'] in report['listeners'] and not (report.get('services', {}).get(role, {}).get('active') and report.get('roles', {}).get(role, {}).get('port') == item['port']):
             raise ValueError('Requested service port is occupied')
     for group in groups.values():
         if len(group['roles']) == 2 and group['roles']['control']['port'] == group['roles']['gateway']['port']:
@@ -189,6 +211,20 @@ def preflight(topology, ssh):
     groups = group_hosts(topology, reports)
     if not topology['control']['managed'] and not reports[topology['control']['sshTarget']]['services']['control']['active']:
         raise ValueError('Gateway-only deployment requires an active managed Control service')
+    return groups
+
+
+def dependency_reports(topology, ssh):
+    targets = dict.fromkeys([topology['control']['sshTarget']] + [node['sshTarget'] for node in topology['gateways']])
+    return {target: ssh.dependencies(target) for target in targets}
+
+
+def checked_preflight(topology, ssh, reports):
+    groups = preflight(topology, ssh)
+    for group in groups:
+        for target in group['aliases']:
+            if reports[target]['machineIdHash'] != group['machineIdHash'] or reports[target]['architecture'] != group['architecture']:
+                raise RuntimeError('Host identity or architecture changed after dependency discovery')
     return groups
 
 
@@ -319,23 +355,42 @@ def main():
     mode.add_argument('--verify', action='store_true')
     mode.add_argument('--export-client', action='store_true')
     mode.add_argument('--install-manager', action='store_true', help='Install gpr without updating or restarting services')
+    mode.add_argument('--install-deps', action='store_true', help='Install only missing Linux prerequisites; no release or service changes')
     mode.add_argument('--rollback', metavar='RUN_ID')
     parser.add_argument('--add-node', metavar='NODE_ID')
     args = parser.parse_args()
+    dependencies.check_local(external=args.apply or args.verify)
     topology = load_topology(args.config.resolve())
     ssh = SSH()
     if args.add_node and (not args.apply or args.add_node not in {node['id'] for node in topology['gateways']}):
         raise ValueError('--add-node requires --apply and a Gateway ID in the topology')
     if args.export_client:
+        dependencies.require_ready({topology['control']['sshTarget']: ssh.dependencies(topology['control']['sshTarget'])})
         certificate = ssh.certificate(topology['control']['sshTarget'])
         print(json.dumps({'clientProfile': str(export_client(topology, certificate))})); return
     if args.rollback:
         if not re.fullmatch('[0-9a-f]{32}', args.rollback): raise ValueError('Invalid rollback run ID')
         journal = json.loads((topology['outputDir'] / ('run-' + args.rollback + '.local.json')).read_text())
+        dependencies.require_ready({target: ssh.dependencies(target) for target in dict.fromkeys(step['target'] for step in journal['steps'])})
         failures = rollback_steps(journal['steps'], ssh)
         if failures: raise RuntimeError('Some hosts could not roll back; rerun the same rollback ID')
         print(json.dumps({'rolledBack': args.rollback})); return
-    groups = preflight(topology, ssh)
+    reports = dependency_reports(topology, ssh)
+    # These groups know topology/identity/architecture only, not listener state.
+    discovered = group_hosts(topology, reports)
+    artifacts = releases(topology, discovered) if args.apply or args.plan else None
+    dependency_plan = [{'sshTarget': target, **report} for target, report in reports.items()]
+    if args.plan and any(report['missingDependencies'] for report in reports.values()):
+        print(json.dumps({'plan': deployment_plan(discovered), 'dependencies': dependency_plan,
+            'preflight': 'incomplete', 'pendingChecks': ['listeners', 'installedRoles', 'serviceConfiguration'],
+            'version': next(iter(artifacts.values()))[1]['version'], 'firewallChanges': False}, indent=2)); return
+    if args.apply or args.install_manager or args.install_deps:
+        reports = dependencies.prepare(ssh, reports)
+    else:
+        dependencies.require_ready(reports)
+    if args.install_deps:
+        print(json.dumps({'dependencies': [{'sshTarget': target, **report} for target, report in reports.items()]})); return
+    groups = checked_preflight(topology, ssh, reports)
     if args.install_manager:
         print(json.dumps({'managers': install_managers(groups, ssh)})); return
     if args.verify:
@@ -344,9 +399,8 @@ def main():
         control = next(group for group in groups if 'control' in group['roles'])
         external = ssh.external(topology, groups, ssh.certificate(control['target']))
         print(json.dumps({'verifiedHosts': len(groups), 'external': external})); return
-    artifacts = releases(topology, groups)
     if args.plan:
-        print(json.dumps({'plan': deployment_plan(groups), 'version': next(iter(artifacts.values()))[1]['version'], 'newGatewayState': 'pending', 'firewallChanges': False}, indent=2)); return
+        print(json.dumps({'plan': deployment_plan(groups), 'dependencies': dependency_plan, 'preflight': 'complete', 'version': next(iter(artifacts.values()))[1]['version'], 'newGatewayState': 'pending', 'firewallChanges': False}, indent=2)); return
     print(json.dumps(apply(topology, groups, artifacts, ssh, args.add_node), indent=2))
 
 

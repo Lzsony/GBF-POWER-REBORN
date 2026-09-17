@@ -40,6 +40,10 @@ def artifact(root, arch='amd64'):
 class FakeSSH:
     def __init__(self):
         self.calls = []; self.fail_preflight = None; self.fail_role = None; self.fail_join = False; self.existing = None; self.ticket = 0
+    def dependencies(self, target, install=False, identity=None):
+        return {'machineIdHash': ('a' if target == 'control.invalid' else 'b') * 64,
+                'architecture': 'amd64', 'distribution': 'debian', 'version': '13',
+                'missingDependencies': [], 'checksComplete': True, 'changed': False}
     def worker(self, target, request):
         self.calls.append((request['action'], target, request.copy()))
         if request['action'] == 'preflight':
