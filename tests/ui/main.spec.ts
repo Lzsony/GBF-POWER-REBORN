@@ -9,7 +9,7 @@ type Options = {
   direct?: boolean; untrusted?: boolean; missingSamples?: boolean;
   configured?: boolean; authorized?: boolean;
   revealDelay?: number; revealFailure?: boolean; installFailure?: boolean;
-  preferencesDelay?: number; preferencesFailure?: boolean;
+  holdPreferences?: boolean; preferencesFailure?: boolean;
   failTest?: boolean; holdProxyTest?: boolean; proxySaveFailure?: boolean;
   switchFailure?: boolean; restoreFailure?: boolean;
   cacheDelay?: number; cacheFailure?: boolean; holdAudit?: boolean; startAuditFailure?: boolean; cancelAuditFailure?: boolean; auditFailures?: number;
@@ -18,6 +18,7 @@ async function desktop(page: Page, options: Options = {}) {
   await page.addInitScript(({ initial, options }) => {
     const state = structuredClone(initial);
     let savedUrl = 'socks5://user:fixture-password@127.0.0.1:7890';
+    let holdPreferences = options.holdPreferences;
     state.settings.mode = options.direct ? 'direct' : 'proxy';
     state.settings.proxyUrl = 'socks5://user:••••@127.0.0.1:7890';
     state.settings.hasAuthentication = true;
@@ -106,7 +107,10 @@ async function desktop(page: Page, options: Options = {}) {
             sessionStorage.setItem('test-settings', JSON.stringify(state.settings));
           }
           if (command === 'save_preferences') {
-            if (options.preferencesDelay) await new Promise(r => setTimeout(r, options.preferencesDelay));
+            if (holdPreferences) {
+              holdPreferences = false;
+              await new Promise<void>(resolve => Object.assign(window, { __finishPreferencesSave: resolve }));
+            }
             if (options.preferencesFailure) throw { code: 'CONFIG_WRITE_FAILED' };
             state.preferences = args.preferences as typeof state.preferences;
             sessionStorage.setItem('test-preferences', JSON.stringify(state.preferences));
@@ -269,9 +273,11 @@ test('narrow submenu remains within the window and restores focus', async ({ pag
 });
 
 test('language and theme persist while preference saves preserve keyboard focus', async ({ page }) => {
-  await openDesktop(page, { preferencesDelay: 200 }); await menu(page);
+  await openDesktop(page, { holdPreferences: true }); await menu(page);
   const simplified = page.getByRole('menuitemradio', { name: '简体', exact: true }); await simplified.focus(); await page.keyboard.press('Enter');
+  await expect.poll(async () => (await commands(page)).filter(c => c.command === 'save_preferences').length).toBe(1);
   await expect(simplified).toHaveAttribute('aria-disabled', 'true'); await expect(simplified).toBeFocused();
+  await page.evaluate(() => (window as unknown as { __finishPreferencesSave: () => void }).__finishPreferencesSave());
   await expect(simplified).toHaveAttribute('aria-disabled', 'false');
   await page.getByRole('menuitemradio', { name: '夜晚', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

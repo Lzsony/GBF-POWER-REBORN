@@ -74,7 +74,11 @@ try {
   expect(await page.locator('.network-quality strong').first().evaluate(e => getComputedStyle(e).fontSize)).toBe('14px');
 
   expect(initial.running).toBe(false); expect(initial.settings.mode).toBe('direct');
-  await expect(page.locator('.mode-field option[value="accelerate"]')).toBeDisabled();
+  if (initial.authorization.configured) {
+    await expect(page.locator('.mode-field option[value="accelerate"]')).toBeEnabled();
+  } else {
+    await expect(page.locator('.mode-field option[value="accelerate"]')).toBeDisabled();
+  }
   if (index > 0) {
     expect(initial.preferences.language).toBe('zh-TW');
     expect(initial.cachePreferences).toEqual({prefetchEnabled:false, warmupEnabled:false});
@@ -90,8 +94,11 @@ try {
   await control('audit-hold');
   await invoke('start_cache_audit');
   expect((await invoke('get_native_control')).state.maintenance).toBe(true);
-  const blocked = await invoke('clear_cache').then(() => null, error => error.code);
-  expect(blocked).toBe('CACHE_MAINTENANCE_BUSY');
+  const blocked = await page.evaluate(async () => {
+    try { await window.__TAURI_INTERNALS__.invoke('clear_cache'); return null; }
+    catch (error) { return error; }
+  });
+  expect(blocked).toEqual({code:'CACHE_MAINTENANCE_BUSY'});
   await invoke('cancel_cache_audit');
   await control('audit-release');
   expect((await invoke('get_status')).audit).toMatchObject({running:false,cancelled:true});
@@ -154,7 +161,7 @@ try {
   expect(config.settings.cachePreferences).toEqual({prefetchEnabled:false,warmupEnabled:false});
   expect(errors).toHaveLength(0);
   console.log(JSON.stringify({result:'PASS',package:manifest.package,dataDirectory:data,runtime:version.product,runtimeExecutable:runtimeExe,
-    checks:['runtime selection overrides stale environment','current data root and WebView data','cross-package single instance preserves running proxy','relaunch preserves settings: '+(index>0),'quoted autostart tracks moved executable: '+isolated,'Chinese and spaced executable path','different working directory',
+    checks:['runtime selection overrides stale environment','current data root and WebView data',...(executables.length>1?['cross-path single instance preserves running proxy']:[]),...(index>0?['relaunch preserves settings']:[]),'quoted autostart tracks moved executable','Chinese and spaced executable path','different working directory',
       'real WebView2 UI and IPC','cache preference persistence','audit repair/cancel/maintenance unlock','preference save','proxy start/PAC/stop/port release','no horizontal overflow','no page errors']},null,2));
   await invoke('quit_app').catch(() => {});
   await Promise.race([ended,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Product did not quit')),10000))]);
@@ -168,8 +175,15 @@ try {
 }
 }
 } finally {
-  if (isolated) for (const key of startupPaths) startup(`Remove-ItemProperty -LiteralPath '${key}' -Name 'GBF Internal Test' -ErrorAction SilentlyContinue`);
-  // The exact root was checked absent before the first launch.
-  await rm(data,{recursive:true,force:true,maxRetries:15,retryDelay:300});
-  if (isolated) await rm(local,{recursive:true,force:true,maxRetries:15,retryDelay:300});
+  try {
+    if (isolated) for (const key of startupPaths) {
+      if (startup(`if (Get-ItemProperty -LiteralPath '${key}' -Name 'GBF Internal Test' -ErrorAction SilentlyContinue) { 'present' }`)) {
+        startup(`Remove-ItemProperty -LiteralPath '${key}' -Name 'GBF Internal Test'`);
+      }
+    }
+  } finally {
+    // The exact root was checked absent before the first launch.
+    await rm(data,{recursive:true,force:true,maxRetries:15,retryDelay:300});
+    if (isolated) await rm(local,{recursive:true,force:true,maxRetries:15,retryDelay:300});
+  }
 }
