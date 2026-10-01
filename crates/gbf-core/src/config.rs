@@ -62,6 +62,15 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Disk quota is a platform policy; iOS ignores the legacy desktop setting.
+    pub fn disk_cache_quota(&self) -> Option<u64> {
+        if cfg!(target_os = "ios") {
+            None
+        } else {
+            Some(u64::from(self.cache_limit_gb) * 1024 * 1024 * 1024)
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.listen_port < 1024 {
             bail!(ErrorCode::ListenPortInvalid);
@@ -109,7 +118,9 @@ impl Settings {
 }
 
 pub fn secret_entry(name: &str) -> Result<keyring::Entry> {
-    #[cfg(feature = "internal-test")]
+    #[cfg(target_os = "ios")]
+    return crate::ios_security::entry(name);
+    #[cfg(all(feature = "internal-test", not(target_os = "ios")))]
     {
         let service = std::env::var("GBF_INTERNAL_TEST_ID")?;
         anyhow::ensure!(
@@ -118,7 +129,7 @@ pub fn secret_entry(name: &str) -> Result<keyring::Entry> {
         );
         Ok(keyring::Entry::new(&service, name)?)
     }
-    #[cfg(not(feature = "internal-test"))]
+    #[cfg(all(not(feature = "internal-test"), not(target_os = "ios")))]
     Ok(keyring::Entry::new("cc.lzsony.gbf-power-reborn", name)?)
 }
 pub fn read_password() -> Result<String> {

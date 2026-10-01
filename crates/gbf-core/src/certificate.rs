@@ -9,8 +9,12 @@ use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
     sync::Arc,
+};
+
+#[cfg(not(target_os = "ios"))]
+use std::{
+    process::Command,
     time::{Duration, Instant},
 };
 
@@ -153,11 +157,14 @@ impl Authority {
 pub fn cert_path(root: &Path) -> PathBuf {
     root.join("local-ca.pem")
 }
+#[cfg(not(target_os = "ios"))]
 const VERIFY_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(not(target_os = "ios"))]
 const MUTATION_TIMEOUT: Duration = Duration::from_secs(120);
 
 // Own the child until it has exited, including errors and unwinding. On Windows
 // the Job owns its entire tree; on macOS security is a directly owned child.
+#[cfg(not(target_os = "ios"))]
 struct CommandChild {
     #[cfg(windows)]
     child: crate::windows_process::Child,
@@ -165,6 +172,7 @@ struct CommandChild {
     child: std::process::Child,
     reaped: bool,
 }
+#[cfg(not(target_os = "ios"))]
 impl CommandChild {
     fn spawn(command: &mut Command) -> std::io::Result<Self> {
         #[cfg(windows)]
@@ -197,6 +205,7 @@ impl CommandChild {
         Ok(())
     }
 }
+#[cfg(not(target_os = "ios"))]
 impl Drop for CommandChild {
     fn drop(&mut self) {
         if !self.reaped {
@@ -204,6 +213,7 @@ impl Drop for CommandChild {
         }
     }
 }
+#[cfg(not(target_os = "ios"))]
 fn quiet(command: &mut Command, timeout: Duration) -> Result<bool> {
     let mut child = CommandChild::spawn(command)?;
     let started = Instant::now();
@@ -257,7 +267,15 @@ fn verify(path: &Path) -> Result<bool> {
 fn verify(path: &Path) -> Result<bool> {
     quiet(Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $c=New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($env:GBF_CA_PATH); $s=New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','CurrentUser'); try { $s.Open('ReadOnly'); foreach($item in $s.Certificates.Find('FindByThumbprint',$c.Thumbprint,$false)){if([Convert]::ToBase64String($item.RawData) -eq [Convert]::ToBase64String($c.RawData)){exit 0}}; exit 1 } finally { $s.Close() }"]).env("GBF_CA_PATH", path), VERIFY_TIMEOUT)
 }
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(target_os = "ios")]
+fn verify(path: &Path) -> Result<bool> {
+    let authority = Authority::load(path.parent().ok_or(ErrorCode::CertificateMissing)?)?;
+    let params = CertificateParams::new(vec!["gpr-cache-check.invalid".into()])?;
+    let key = KeyPair::generate()?;
+    let leaf = params.signed_by(&key, &authority.certificate, &authority.key)?;
+    crate::ios_security::certificate_trusted(&fs::read_to_string(path)?, leaf.der().as_ref())
+}
+#[cfg(not(any(target_os = "macos", target_os = "ios", windows)))]
 fn verify(_: &Path) -> Result<bool> {
     Ok(false)
 }
@@ -280,6 +298,7 @@ pub fn install(root: &Path) -> Result<CertificateStatus> {
 }
 fn install_with_entry(root: &Path, entry: &keyring::Entry) -> Result<CertificateStatus> {
     Authority::create_with_entry(root, entry)?;
+    #[cfg(not(target_os = "ios"))]
     let path = cert_path(root);
     #[cfg(target_os = "macos")]
     let result = quiet(

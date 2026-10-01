@@ -183,7 +183,7 @@ for (const [locale, language] of [['en-US', 'en'], ['ja-JP', 'ja'], ['fr-FR', 'e
     await expect(page).toHaveTitle('GBF POWER REBORN');
     await expect(page.locator('html')).toHaveAttribute('lang', language);
     await expect(page.locator('.brand')).toHaveText('GBF POWER REBORN');
-    await expect(page.locator('.statusbar')).toContainText('v0.4.0');
+    await expect(page.locator('.statusbar')).toContainText('v0.5.0');
     await expect(page.locator('.start-button')).toBeDisabled();
     await expect(page.getByRole('status')).toHaveText(dictionaries[language].stoppedNotice);
   });

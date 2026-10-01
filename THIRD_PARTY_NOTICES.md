@@ -15,3 +15,5 @@ Rust 與 npm 依賴保留各自授權。`Cargo.lock` 與 `package-lock.json` 固
 Windows 執行環境使用 Microsoft Edge WebView2。CI 測試套件依賴系統已安裝的 WebView2 Runtime，不包含其再分發副本。
 
 專案致謝見 [README](README.md)。本文件不授予第三方商標或遊戲素材的權利。
+
+iOS 驗證工程使用 SwiftUI 系統字型與 SF Symbols，不打包桌面字型。內嵌 SSH 使用 `russh`，其授權為 Apache-2.0；`scripts/collect-ios-licenses.py` 依解析的 iOS 依賴圖收集授權全文與版本清單，隨 App 置於 `Licenses`。

@@ -346,7 +346,7 @@ async fn fetch(
             return Ok(FetchOutcome::Cancelled);
         }
         let cache = state.cache.clone();
-        let limit = state.settings.cache_limit_gb as u64 * 1024 * 1024 * 1024;
+        let limit = state.settings.disk_cache_quota();
         tokio::task::spawn_blocking(move || cache.put(&key, entry, limit)).await??;
         state.metrics.downloads.fetch_add(1, Ordering::Relaxed);
         state.metrics.prefetched.fetch_add(1, Ordering::Relaxed);

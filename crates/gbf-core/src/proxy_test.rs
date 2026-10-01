@@ -21,7 +21,7 @@ pub struct ProxyTestResult {
     pub state: &'static str,
 }
 impl ProxyTestResult {
-    fn empty(test_id: String, line_id: String) -> Self {
+    pub(super) fn empty(test_id: String, line_id: String) -> Self {
         Self {
             test_id,
             line_id,

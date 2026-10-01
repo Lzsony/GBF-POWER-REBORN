@@ -1,16 +1,19 @@
 # GBF POWER REBORN
 
-GBF POWER REBORN 是面向 macOS 與 Windows 的網路體驗優化專案，透過本地靜態資源快取與動態流量透明轉發，減少靜態資源的重複下載並降低載入延遲。本專案僅供學習、研究與技術交流。
+GBF POWER REBORN 是面向 macOS 與 Windows、另含 iOS 驗證工程的網路體驗優化專案，透過本地靜態資源快取與動態流量透明轉發，減少靜態資源的重複下載並降低載入延遲。本專案僅供學習、研究與技術交流。
 
 ## 開發狀態
 
-**0.4.0 開發版。** 提供直連、上游代理、本機快取，以及使用者自建 Control／SSH Gateway 的加速能力；介面支援简体、繁體、日本語與 English。服務入口及公開信任資料在建置時內嵌，未提供服務配置的通用版停用加速。平台驗證範圍見[驗證紀錄](docs/validation.md)。
+**0.5.0 開發版。** 提供直連、上游代理、本機快取，以及使用者自建 Control／SSH Gateway 的加速能力；介面支援简体、繁體、日本語與 English。服務入口及公開信任資料在建置時內嵌，未提供服務配置的通用版停用加速。平台驗證範圍見[驗證紀錄](docs/validation.md)。
+
+iOS 已加入 SwiftUI／Network Extension 可行性驗證工程，啟動後直接顯示主介面，授權後可使用加速模式與素材快取；已完成 iPhone 基本簽署與功能驗收，連續長測及進階網路專項仍待補驗，見 [iOS 開發與驗收](docs/ios.md)。
 
 ## 平台與技術棧
 
 | 層級 | 平台與技術 |
 | --- | --- |
 | 桌面客戶端 | macOS arm64、Windows x64；Tauri 2、React、Rust |
+| iOS 驗證工程 | iPhone／iOS 17+；SwiftUI、Network Extension、Rust；已完成基礎真機驗收 |
 | 服務端 | Go、SQLite、Bubble Tea TUI、獨立 SSH Gateway；Debian／Ubuntu systemd |
 
 服務端區分控制平面與流量平面：Control 負責帳號、裝置、節點及授權管理；Gateway 負責遊戲流量轉發。兩者即使部署於同一主機，仍使用獨立服務與資料。

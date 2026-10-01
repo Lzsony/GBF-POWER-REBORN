@@ -1,3 +1,6 @@
+#[path = "connection_check.rs"]
+mod connection_check;
+pub use connection_check::ConnectionCheckView;
 #[path = "proxy_test.rs"]
 mod proxy_test;
 use crate::acceleration::{self, AccelerationStatus, LineView, SharedStatus, Tunnel};
@@ -607,6 +610,7 @@ pub struct Runtime {
     operations: Mutex<()>,
     control: tokio::sync::watch::Sender<ControlState>,
     proxy_test: Mutex<Option<proxy_test::Job>>,
+    connection_checks: connection_check::Checks,
     pub cache: Arc<Cache>,
     pub settings: RwLock<Settings>,
     pub certificate: RwLock<CertificateStatus>,
@@ -666,6 +670,7 @@ impl Runtime {
             operations: Mutex::new(()),
             control: tokio::sync::watch::channel(ControlState::default()).0,
             proxy_test: Mutex::new(None),
+            connection_checks: Default::default(),
             root,
             cache,
             settings: RwLock::new(settings),
@@ -899,6 +904,7 @@ impl Runtime {
         self.stop_inner().await
     }
     async fn stop_inner(&self) -> Result<()> {
+        self.connection_checks.reset();
         self.cancel_proxy_test(None).await;
         let mut active = self.active.lock().await;
         if let Some(mut running) = active.take() {

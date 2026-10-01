@@ -183,6 +183,7 @@ fn safe_path(root: &Path, path: &Path) -> Result<PathBuf> {
     }
     Ok(target)
 }
+#[cfg(not(target_os = "ios"))]
 fn ensure_key(root: &Path, c: &AuthConfig) -> Result<()> {
     let path = safe_path(root, &c.identity_file)?;
     std::fs::create_dir_all(path.parent().unwrap())?;
@@ -213,6 +214,36 @@ fn ensure_key(root: &Path, c: &AuthConfig) -> Result<()> {
     }
     Ok(())
 }
+#[cfg(target_os = "ios")]
+fn ensure_key(_root: &Path, c: &AuthConfig) -> Result<()> {
+    let entry = crate::config::secret_entry(&format!("identity:{}", c.identity_file.display()))?;
+    match entry.get_password() {
+        Ok(value) => {
+            ssh_key::PrivateKey::from_openssh(value)?;
+        }
+        Err(keyring::Error::NoEntry) => {
+            let key = ssh_key::PrivateKey::random(&mut OsRng, ssh_key::Algorithm::Ed25519)?;
+            entry.set_password(&key.to_openssh(ssh_key::LineEnding::LF)?)?;
+        }
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
+pub(crate) fn device_key(root: &Path, identity: &Path) -> Result<ssh_key::PrivateKey> {
+    #[cfg(target_os = "ios")]
+    {
+        let _ = root;
+        let value = crate::config::secret_entry(&format!("identity:{}", identity.display()))?
+            .get_password()?;
+        Ok(ssh_key::PrivateKey::from_openssh(value)?)
+    }
+    #[cfg(not(target_os = "ios"))]
+    Ok(ssh_key::PrivateKey::read_openssh_file(&safe_path(
+        root, identity,
+    )?)?)
+}
+
 fn clear_managed_hosts(root: &Path, config: &AuthConfig) -> Result<()> {
     let directory = config
         .identity_file
@@ -265,8 +296,7 @@ pub fn envelope(
     path: &str,
     body: &serde_json::Value,
 ) -> Result<Envelope> {
-    let private = ssh_key::PrivateKey::read_openssh_file(&safe_path(root, &config.identity_file)?)
-        .context(ErrorCode::SshNotConfigured)?;
+    let private = device_key(root, &config.identity_file).context(ErrorCode::SshNotConfigured)?;
     if private.key_data().ed25519().is_none() {
         bail!(ErrorCode::SshNotConfigured);
     }
@@ -581,6 +611,10 @@ impl Authorization {
         )
         .await?;
         let reply: Reply = serde_json::from_value(value).context(ErrorCode::AuthUnavailable)?;
+        // Never persist a rejected activation as a registered identity.
+        if !reply.active {
+            bail!(ErrorCode::AuthRevoked);
+        }
         self.codes.write(&profile.deployment_id, &code)?;
         config.registered = true;
         self.save_config(&config)?;

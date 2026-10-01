@@ -2,7 +2,7 @@
 
 ## 平台與初始設定
 
-0.4.0 支援 macOS arm64 與 Windows x64 程式碼建置。平台實測結果見[驗證紀錄](validation.md)。顯示名稱為 `GBF POWER REBORN`，系統識別為 `cc.lzsony.gbf-power-reborn`。
+0.5.0 支援 macOS arm64 與 Windows x64 程式碼建置。平台實測結果見[驗證紀錄](validation.md)。顯示名稱為 `GBF POWER REBORN`，系統識別為 `cc.lzsony.gbf-power-reborn`。
 
 | 設定 | 初始值 |
 | --- | --- |

@@ -6,7 +6,7 @@
 
 ## 客戶端與元件分工
 
-客戶端以 macOS arm64 與 Windows x64 為目標平台，使用 Tauri 2、React 與 Rust；服務端使用 Go、SQLite、Bubble Tea TUI 與獨立 SSH Gateway。0.4.0 包含客戶端、服務端及配置驅動的部署工具。
+客戶端以 macOS arm64 與 Windows x64 為目標平台，使用 Tauri 2、React 與 Rust；服務端使用 Go、SQLite、Bubble Tea TUI 與獨立 SSH Gateway。0.5.0 包含客戶端、服務端及配置驅動的部署工具。
 
 | 元件 | 職責 |
 | --- | --- |
@@ -17,6 +17,12 @@
 | SSH Gateway | 驗證連線身分、限制目的地並轉發遊戲流量 |
 
 Control 的帳號與裝置識別屬於本工具的授權體系，不包含遊戲帳號或登入憑證。
+
+## iOS 驗證工程
+
+iOS 使用 SwiftUI App、Network Extension 與 Rust C ABI，只提供加速模式。啟動後直接顯示主介面，再非阻塞驗證已保存身份；使用者由主介面開啟授權面板，驗證成功且有可用節點才能啟動加速。未授權、離線、配置錯誤及撤銷都不隱藏主介面；VPN 擴充套件亦獨立驗證。App Groups 與共享 Keychain 分別保存非秘密資料和私鑰，跨程序排他鎖管理核心所有權。iOS 使用內嵌 SSH，桌面維持 OpenSSH；Control v1 與 Gateway 契約不變。
+
+目前 PAC／本機代理在 Packet Tunnel 的用法屬可行性驗證，不是已通過 iPhone 驗收的平台能力。iOS 提供連線後的節點 TCP 延遲檢查，磁碟快取不設總容量配額，且不提供容量設定／檢查修復；記憶體限制與待完成項目以 [iOS 規格](ios.md) 為準，不套用下述桌面資源上限。
 
 ## PAC 分流與上游模式
 

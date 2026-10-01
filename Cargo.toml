@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/gbf-core", "src-tauri"]
+members = ["crates/gbf-core", "src-tauri", "crates/gbf-ios"]
 resolver = "2"
 
 [profile.release]

@@ -1,5 +1,14 @@
+#[cfg(not(target_os = "ios"))]
 pub mod acceleration;
+#[cfg(target_os = "ios")]
+#[path = "embedded_ssh.rs"]
+pub mod acceleration;
+mod acceleration_types;
 pub mod authorization;
+#[cfg(all(feature = "embedded-ssh", not(target_os = "ios")))]
+pub mod embedded_ssh;
+#[cfg(target_os = "ios")]
+mod ios_security;
 pub mod selection;
 pub use authorization::EmbeddedPublicProfile;
 mod background;

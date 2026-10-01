@@ -1,7 +1,10 @@
 use super::*;
 
 const WRITE_ITEMS: usize = 32;
+#[cfg(not(target_os = "ios"))]
 const WRITE_BYTES: usize = 64 * 1024 * 1024;
+#[cfg(target_os = "ios")]
+const WRITE_BYTES: usize = 2 * 1024 * 1024;
 
 impl Cache {
     /// Publish a validated response without waiting for filesystem or SQLite locks.
@@ -46,7 +49,8 @@ impl Cache {
     }
 
     /// Runs on one bounded background writer; cancelled/replaced generations cannot revive data.
-    pub(crate) fn persist(&self, id: u64, limit: u64) -> Result<Option<bool>> {
+    pub(crate) fn persist(&self, id: u64, limit: impl Into<Option<u64>>) -> Result<Option<bool>> {
+        let limit = limit.into();
         let mut store = self.inner.lock().unwrap();
         let (key, entry, download) = {
             let mut ram = self.ram.lock().unwrap();
@@ -93,17 +97,7 @@ impl Cache {
             Self::remember(&mut store, &key, entry)?;
         }
         saved?;
-        if Self::usage_locked(&store)? > limit {
-            Self::flush_locked(&mut store)?;
-        }
-        while Self::usage_locked(&store)? > limit {
-            let (hash, partition): (String, String) = store.db.query_row(
-                "SELECT key,language FROM entries ORDER BY accessed ASC,key ASC LIMIT 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )?;
-            Self::remove_locked(&self.root, &mut store, &hash, &partition)?;
-        }
+        self.enforce_quota(&mut store, limit)?;
         Ok(Some(download))
     }
 }
@@ -111,6 +105,58 @@ impl Cache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unbounded_cache_clear_handles_multiple_index_batches() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(dir.path()).unwrap();
+        for index in 0..300 {
+            let uri = format!("https://prd-game-a-granbluefantasy.akamaized.net/assets/{index}.js");
+            let key = CacheKey::from_url(&uri).unwrap();
+            cache.put(&key, entry(&uri, b"ok"), None).unwrap();
+        }
+        assert_eq!(cache.usage().unwrap(), 600);
+        cache.clear().unwrap();
+        assert_eq!(cache.usage().unwrap(), 0);
+        assert_eq!(std::fs::read_dir(cache.root.join("ja")).unwrap().count(), 0);
+    }
+    #[test]
+    fn unbounded_quota_keeps_entries_and_manual_clear_removes_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(dir.path()).unwrap();
+        let a = "https://prd-game-a-granbluefantasy.akamaized.net/assets/a.js";
+        let b = "https://prd-game-a-granbluefantasy.akamaized.net/assets/b.js";
+        let ka = CacheKey::from_url(a).unwrap();
+        let kb = CacheKey::from_url(b).unwrap();
+        cache.put(&ka, entry(a, b"first"), None).unwrap();
+        let ticket = cache.stage(kb.clone(), entry(b, b"second"), true).unwrap();
+        cache.persist(ticket, None).unwrap();
+        assert_eq!(cache.usage().unwrap(), 11);
+        assert!(cache.get(&ka).unwrap().is_some());
+        assert!(cache.get(&kb).unwrap().is_some());
+        // The same store still applies the desktop's finite quota when requested.
+        cache.put(&kb, entry(b, b"second"), Some(6)).unwrap();
+        assert_eq!(cache.usage().unwrap(), 6);
+        assert!(cache.get(&ka).unwrap().is_none());
+        cache.clear().unwrap();
+        assert_eq!(cache.usage().unwrap(), 0);
+    }
+
+    #[test]
+    fn unbounded_disk_failure_releases_writer_and_retains_usable_ram_response() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(dir.path()).unwrap();
+        let uri = "https://prd-game-a-granbluefantasy.akamaized.net/assets/write-failure.js";
+        let key = CacheKey::from_url(uri).unwrap();
+        let ticket = cache
+            .stage(key.clone(), entry(uri, b"valid"), true)
+            .unwrap();
+        // A deterministic disk failure without filling the developer's drive.
+        std::fs::remove_dir(cache.root.join("ja")).unwrap();
+        std::fs::write(cache.root.join("ja"), b"blocked").unwrap();
+        assert!(cache.persist(ticket, None).is_err());
+        assert!(cache.ram.lock().unwrap().writes.is_empty());
+        assert_eq!(cache.get_ram(&key).unwrap().body.as_ref(), b"valid");
+    }
     fn entry(uri: &str, text: &'static [u8]) -> Cached {
         let req = Request::builder().uri(uri).body(()).unwrap();
         let res = Response::builder()

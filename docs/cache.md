@@ -1,5 +1,7 @@
 # 本機快取與背景工作
 
+本文的容量、背景工作與體檢設定以桌面客戶端為準。iOS 不設磁碟快取總容量配額，不提供容量設定或手動檢查修復，仍保留 RAM／單物件／寫入佇列限制與手動清除；平台差異見 [iOS 規格](ios.md)。共用快取保存接受可選配額，無配額時不執行容量淘汰，磁碟寫入失敗維持正常回應可用。
+
 ## 資源與儲存邊界
 
 快取僅處理兩個靜態主機：`prd-game-a-granbluefantasy.akamaized.net`、`prd-game-a-granbluefantasy-steam.akamaized.net`。`/assets/` 與 `/assets_en/` 分別存入 `ja`、`en` 分區，與介面語言獨立，不跨語言回退。完整 URL 的主機、路徑、版本與 query 均參與快取鍵。

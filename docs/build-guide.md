@@ -124,3 +124,7 @@ macOS／Windows 的系統確認與完整遊戲流程須在實際裝置驗收，�
 | 授權成功卻沒有節點 | 在 Control 確認節點開放、健康且帳號已取得該節點權限 |
 
 要刻意建置通用版時，macOS 使用 `unset GPR_CLIENT_CONFIG`，PowerShell 使用 `Remove-Item Env:GPR_CLIENT_CONFIG -ErrorAction SilentlyContinue`，再執行相同建置流程。
+
+## iOS 驗證工程
+
+iPhone 的 SwiftUI／Network Extension 工程、公開 profile、Rust XCFramework、簽署及真機門檻見 [iOS 開發與驗收](ios.md)。入口為 `python3 scripts/build-ios.py`；無簽署建置加上 `--unsigned`。iOS 僅提供授權後的加速，不提供桌面通用版的直連與上游代理功能。

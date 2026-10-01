@@ -1,6 +1,9 @@
 use std::io::Read;
 
+#[cfg(not(target_os = "ios"))]
 const DECODE_LIMIT: usize = 64 * 1024 * 1024;
+#[cfg(target_os = "ios")]
+const DECODE_LIMIT: usize = 2 * 1024 * 1024;
 
 fn bounded(reader: &mut impl Read, limit: usize) -> Option<Vec<u8>> {
     let mut bytes = Vec::new();
@@ -36,7 +39,7 @@ fn validate_limit(path: &str, headers: &http::HeaderMap, body: &[u8], limit: usi
             let decoded = bounded(&mut decoder, limit);
             decoded.filter(|_| decoder.total_in() as usize == body.len())
         }
-        "br" => decode_brotli(body, limit),
+        "br" if !cfg!(target_os = "ios") => decode_brotli(body, limit),
         _ => None,
     };
     decoded.is_some_and(|bytes| super::valid_decoded_content(path, headers, &bytes))

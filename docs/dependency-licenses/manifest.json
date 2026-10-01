@@ -1767,6 +1767,98 @@
         }
       ],
       "kind": "fulltext"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "delegate",
+      "version": "0.13.5",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/kobzol/rust-delegate",
+      "commit": "b129d4cbf4cc499eff7743365dcb0fe5d8d2e820",
+      "pathInVcs": "",
+      "files": [
+        "ios/delegate-0.13.5-LICENSE-APACHE.txt"
+      ],
+      "sources": [
+        {
+          "file": "ios/delegate-0.13.5-LICENSE-APACHE.txt",
+          "url": "https://raw.githubusercontent.com/kobzol/rust-delegate/b129d4cbf4cc499eff7743365dcb0fe5d8d2e820/LICENSE-APACHE",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+          "kind": "fulltext",
+          "commit": "b129d4cbf4cc499eff7743365dcb0fe5d8d2e820",
+          "path": "LICENSE-APACHE"
+        }
+      ],
+      "kind": "fulltext"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "russh",
+      "version": "0.63.3",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/warp-tech/russh",
+      "commit": "f33baf439be8c59c49cb6cb2ae5976c579495bdf",
+      "pathInVcs": "russh",
+      "files": [
+        "ios/russh-0.63.3-LICENSE-APACHE.txt"
+      ],
+      "sources": [
+        {
+          "file": "ios/russh-0.63.3-LICENSE-APACHE.txt",
+          "url": "https://api.github.com/repos/Eugeny/russh/git/blobs/d645695673349e3947e8e5ae42332d0ac3164cd7",
+          "commit": "f33baf439be8c59c49cb6cb2ae5976c579495bdf",
+          "path": "LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "kind": "fulltext"
+        }
+      ],
+      "kind": "fulltext"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "russh-cryptovec",
+      "version": "0.62.0",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/warp-tech/russh",
+      "commit": "907c732562c5732aad6c140dba958eafddc41ba0",
+      "pathInVcs": "cryptovec",
+      "files": [
+        "ios/russh-cryptovec-0.62.0-LICENSE-APACHE.txt"
+      ],
+      "sources": [
+        {
+          "file": "ios/russh-cryptovec-0.62.0-LICENSE-APACHE.txt",
+          "url": "https://api.github.com/repos/Eugeny/russh/git/blobs/d645695673349e3947e8e5ae42332d0ac3164cd7",
+          "commit": "907c732562c5732aad6c140dba958eafddc41ba0",
+          "path": "LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "kind": "fulltext"
+        }
+      ],
+      "kind": "fulltext"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "russh-util",
+      "version": "0.52.0",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/warp-tech/russh",
+      "commit": "3d09c20c52a542ffa327723d3a44cb1edd9b0ca4",
+      "pathInVcs": "russh-util",
+      "files": [
+        "ios/russh-util-0.52.0-LICENSE-APACHE.txt"
+      ],
+      "sources": [
+        {
+          "file": "ios/russh-util-0.52.0-LICENSE-APACHE.txt",
+          "url": "https://api.github.com/repos/Eugeny/russh/git/blobs/d645695673349e3947e8e5ae42332d0ac3164cd7",
+          "commit": "3d09c20c52a542ffa327723d3a44cb1edd9b0ca4",
+          "path": "LICENSE-2.0.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "kind": "fulltext"
+        }
+      ],
+      "kind": "fulltext"
     }
   ]
 }

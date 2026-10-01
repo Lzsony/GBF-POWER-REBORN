@@ -1,6 +1,6 @@
 # 自建服務部署與客戶端建置
 
-0.4.0 提供 Linux Control、SSH Gateway、管理 TUI 及配置驅動的部署工具。部署者自備主機與管理 SSH，完成服務部署後，將公開服務 profile 內嵌到自行建置的客戶端，再分發給使用者。專案不提供公共節點。
+0.5.0 提供 Linux Control、SSH Gateway、管理 TUI 及配置驅動的部署工具。部署者自備主機與管理 SSH，完成服務部署後，將公開服務 profile 內嵌到自行建置的客戶端，再分發給使用者。專案不提供公共節點。
 
 首次操作見[部署指引](deployment-guide.md)與[建置指引](build-guide.md)；本文保留拓撲、隔離、配置及失敗處理的技術契約。
 
@@ -42,7 +42,7 @@ python3 scripts/build-server.py --arch all
 cp deploy/topology.example.json deploy/topology.local.json
 ```
 
-Go 版本以 `server/go.mod` 為準；工具鏈不在 PATH 時使用 `--go /absolute/path/to/go`。`--arch` 接受 `amd64`、`arm64`、`all`，`--output-dir` 可指定輸出位置。預設產物位於 `artifacts/server/gbf-server-0.4.0-linux-<arch>/`，包含二進位、共用目的地規則、授權與 hash manifest；同名已存在時不覆寫。
+Go 版本以 `server/go.mod` 為準；工具鏈不在 PATH 時使用 `--go /absolute/path/to/go`。`--arch` 接受 `amd64`、`arm64`、`all`，`--output-dir` 可指定輸出位置。預設產物位於 `artifacts/server/gbf-server-0.5.0-linux-<arch>/`，包含二進位、共用目的地規則、授權與 hash manifest；同名已存在時不覆寫。
 
 編輯 [topology.example.json](../deploy/topology.example.json) 的本機副本：
 

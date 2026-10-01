@@ -48,7 +48,7 @@ def source_inventory():
 def verify_app(app, profile_tag):
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert info['CFBundleIdentifier'] == 'cc.lzsony.gbf-power-reborn'
-    assert info['CFBundleShortVersionString'] == '0.4.0'
+    assert info['CFBundleShortVersionString'] == '0.5.0'
     assert info['LSMinimumSystemVersion'] == '13.0'
     binary = app / 'Contents/MacOS' / info['CFBundleExecutable']
     assert run('lipo', '-archs', str(binary), capture_output=True, text=True).stdout.strip() == 'arm64'
@@ -125,10 +125,10 @@ def main():
                 if attached:
                     run('hdiutil', 'detach', str(mount))
             shutil.copytree(app, stage / app.name, symlinks=True)
-            dmg_name = 'GBF-POWER-REBORN-0.4.0-macos-arm64.dmg'
+            dmg_name = 'GBF-POWER-REBORN-0.5.0-macos-arm64.dmg'
             shutil.copy2(dmgs[0], stage / dmg_name)
             manifest = {'baseCommit': run('git', 'rev-parse', 'HEAD', capture_output=True, text=True).stdout.strip(),
-                        'version': '0.4.0', 'identifier': 'cc.lzsony.gbf-power-reborn',
+                        'version': '0.5.0', 'identifier': 'cc.lzsony.gbf-power-reborn',
                         'clientProfile': {key: profile[key] for key in ('tag', 'deploymentId', 'url') if key in profile},
                         'platform': platform.platform(), 'signature': 'ad-hoc', 'notarized': False,
                         'sourceFiles': sources, 'files': contents, 'dmgSha256': digest(stage / dmg_name)}

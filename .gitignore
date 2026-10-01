@@ -13,6 +13,11 @@ __pycache__/
 .venv/
 .pytest_cache/
 src-tauri/gen/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+ios/Config/Local.xcconfig
 
 # Local caches and runtime data
 .cache/

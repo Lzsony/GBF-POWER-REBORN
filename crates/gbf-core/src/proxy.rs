@@ -113,7 +113,7 @@ impl ContextState {
             tasks: TaskTracker::new(),
             locks: Mutex::new(HashMap::new()),
             certs: Mutex::new(HashMap::new()),
-            fetch_slots: Arc::new(Semaphore::new(16)),
+            fetch_slots: Arc::new(Semaphore::new(if cfg!(target_os = "ios") { 2 } else { 16 })),
             write_gate: Arc::new(AsyncMutex::new(())),
             #[cfg(test)]
             prefetch_waiting: tokio::sync::Notify::new(),
@@ -142,7 +142,7 @@ impl ContextState {
         self.tasks.spawn(async move {
             let _writer = state.write_gate.lock().await;
             let cache = state.cache.clone();
-            let limit = state.settings.cache_limit_gb as u64 * 1024 * 1024 * 1024;
+            let limit = state.settings.disk_cache_quota();
             match tokio::task::spawn_blocking(move || cache.persist(ticket, limit)).await {
                 Ok(Ok(Some(true))) => {
                     state.metrics.downloads.fetch_add(1, Ordering::Relaxed);
@@ -179,7 +179,11 @@ pub async fn serve(listener: TcpListener, state: Arc<ContextState>) {
             }
         }
     });
-    let connections = Arc::new(Semaphore::new(256));
+    let connections = Arc::new(Semaphore::new(if cfg!(target_os = "ios") {
+        32
+    } else {
+        256
+    }));
     loop {
         tokio::select! {
             _ = state.cancel.cancelled() => break,

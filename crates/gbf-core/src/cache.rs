@@ -19,8 +19,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(not(target_os = "ios"))]
 pub const MAX_OBJECT: usize = 16 * 1024 * 1024;
+// The mobile prototype streams larger responses without buffering or caching.
+#[cfg(target_os = "ios")]
+pub const MAX_OBJECT: usize = 512 * 1024;
+#[cfg(not(target_os = "ios"))]
 const RAM_LIMIT: usize = 128 * 1024 * 1024;
+#[cfg(target_os = "ios")]
+const RAM_LIMIT: usize = 4 * 1024 * 1024;
 const PARTITIONS: [&str; 2] = ["ja", "en"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -302,7 +309,8 @@ impl Cache {
         self.get_ram(key);
         Ok(Some(entry))
     }
-    pub fn put(&self, key: &CacheKey, entry: Cached, limit: u64) -> Result<()> {
+    pub fn put(&self, key: &CacheKey, entry: Cached, limit: impl Into<Option<u64>>) -> Result<()> {
+        let limit = limit.into();
         if entry.body.is_empty() || entry.body.len() > MAX_OBJECT || !entry.policy.is_storable() {
             return Ok(());
         }
@@ -324,19 +332,27 @@ impl Cache {
         let accessed = store.tick();
         store.db.execute("INSERT OR REPLACE INTO entries (key,policy,size,digest,accessed,language) VALUES (?1,?2,?3,?4,?5,?6)",params![key.hash,policy,entry.body.len(),digest(&entry.body),accessed,key.language.directory()])?;
         Self::remember(&mut store, key, entry)?;
-        if Self::usage_locked(&store)? > limit {
-            Self::flush_locked(&mut store)?;
+        self.enforce_quota(&mut store, limit)?;
+        Ok(())
+    }
+    fn enforce_quota(&self, store: &mut Store, limit: Option<u64>) -> Result<()> {
+        let Some(limit) = limit else {
+            return Ok(());
+        };
+        if Self::usage_locked(store)? > limit {
+            Self::flush_locked(store)?;
         }
-        while Self::usage_locked(&store)? > limit {
+        while Self::usage_locked(store)? > limit {
             let (hash, partition): (String, String) = store.db.query_row(
                 "SELECT key,language FROM entries ORDER BY accessed ASC,key ASC LIMIT 1",
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )?;
-            Self::remove_locked(&self.root, &mut store, &hash, &partition)?;
+            Self::remove_locked(&self.root, store, &hash, &partition)?;
         }
         Ok(())
     }
+
     fn remember(store: &mut Store, key: &CacheKey, entry: Cached) -> Result<()> {
         // At most 2048 pending evicted keys plus 2048 resident keys. Admission
         // backpressure belongs to disk work, never the RAM response path.
@@ -426,13 +442,19 @@ impl Cache {
             ram.ram_size = 0;
             ram.pending.clear();
         }
-        let keys: Vec<(String, String)> = store
-            .db
-            .prepare("SELECT key,language FROM entries")?
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-            .collect::<Result<_, _>>()?;
-        for (hash, partition) in keys {
-            Self::remove_locked(&self.root, &mut store, &hash, &partition)?;
+        // Unlimited disk caches must not load the entire index into extension RAM.
+        loop {
+            let keys: Vec<(String, String)> = store
+                .db
+                .prepare("SELECT key,language FROM entries LIMIT 256")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            if keys.is_empty() {
+                break;
+            }
+            for (hash, partition) in keys {
+                Self::remove_locked(&self.root, &mut store, &hash, &partition)?;
+            }
         }
         clean_orphans(&self.root, &store.db)?;
         Ok(())

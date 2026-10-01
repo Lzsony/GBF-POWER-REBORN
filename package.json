@@ -1,6 +1,6 @@
 {
   "name": "gbf-power-reborn",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,9 @@
     "desktop": "tauri dev",
     "test:ui": "playwright test",
     "package:macos": "python3 scripts/package-macos.py",
-    "test:pac": "node scripts/test-pac.mjs"
+    "test:pac": "node scripts/test-pac.mjs",
+    "ios:build": "python3 scripts/build-ios.py",
+    "test:ios": "swift test --package-path ios --scratch-path artifacts/ios/swift-tests"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
